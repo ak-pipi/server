@@ -8,3 +8,7 @@ Release/
 *.exe
 *.pdb
 *.dmp
+.idea/
+build/
+build-debug/
+.vscode/
