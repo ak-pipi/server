@@ -37,7 +37,26 @@
 #include "GuanDan/GuanDanLoader.h"
 #include "GuanDan/GuanDanMessages.h"
 #include "GuanDan/GuanDanCandidateOrder.h"
+#include "TaoJiangMahjong/TaoJiangMahjongRoomHandler.h"
+#include "TaoJiangMahjong/TaoJiangMahjongLoader.h"
+#include "TaoJiangMahjong/TaoJiangMahjongMessages.h"
+#include "HongZhongMahjong/HongZhongMahjongRoomHandler.h"
+#include "HongZhongMahjong/HongZhongMahjongLoader.h"
+#include "HongZhongMahjong/HongZhongMahjongMessages.h"
+#include "PaoDeKuai/PaoDeKuaiRoomHandler.h"
+#include "PaoDeKuai/PaoDeKuaiLoader.h"
+#include "PaoDeKuai/PaoDeKuaiMessages.h"
+#include "ChangShaMahjong/ChangShaMahjongRoomHandler.h"
+#include "ChangShaMahjong/ChangShaMahjongLoader.h"
+#include "ChangShaMahjong/ChangShaMahjongMessages.h"
+#include "YiYangWaiHuZi/YiYangWaiHuZiRoomHandler.h"
+#include "YiYangWaiHuZi/YiYangWaiHuZiLoader.h"
+#include "YiYangWaiHuZi/YiYangWaiHuZiMessages.h"
+#include "YuanJiangQianFen/YuanJiangQianFenRoomHandler.h"
+#include "YuanJiangQianFen/YuanJiangQianFenLoader.h"
+#include "YuanJiangQianFen/YuanJiangQianFenMessages.h"
 #include "Game/DebtLiquidation.h"
+#include "Game/VersionManager.h"
 
 #include "Example.h"
 
@@ -313,6 +332,9 @@ int main(int argc, char* argv[]) {
         // 初始化玩家管理器
         NiuMa::PlayerManager::getSingleton().init();
 
+        // 初始化版本管理器
+        NiuMa::VersionManager::getSingleton().init(directExchange, directConsumerTag);
+
         // 初始化场地管理器
         NiuMa::VenueManager::getSingleton().init(serverId, directExchange, directConsumerTag);
 
@@ -326,6 +348,18 @@ int main(int argc, char* argv[]) {
         loader = std::make_shared<NiuMa::NiuNiu100Loader>();
         NiuMa::VenueManager::getSingleton().registLoader(loader);
         loader = std::make_shared<NiuMa::GuanDanLoader>();
+        NiuMa::VenueManager::getSingleton().registLoader(loader);
+        loader = std::make_shared<NiuMa::TaoJiangMahjongLoader>();
+        NiuMa::VenueManager::getSingleton().registLoader(loader);
+        loader = std::make_shared<NiuMa::HongZhongMahjongLoader>();
+        NiuMa::VenueManager::getSingleton().registLoader(loader);
+        loader = std::make_shared<NiuMa::PaoDeKuaiLoader>();
+        NiuMa::VenueManager::getSingleton().registLoader(loader);
+        loader = std::make_shared<NiuMa::ChangShaMahjongLoader>();
+        NiuMa::VenueManager::getSingleton().registLoader(loader);
+        loader = std::make_shared<NiuMa::YiYangWaiHuZiLoader>();
+        NiuMa::VenueManager::getSingleton().registLoader(loader);
+        loader = std::make_shared<NiuMa::YuanJiangQianFenLoader>();
         NiuMa::VenueManager::getSingleton().registLoader(loader);
 
         // 创建场地外消息处理器线程池
@@ -379,6 +413,48 @@ int main(int argc, char* argv[]) {
             handlers.push_back(handler);
             NiuMa::VenueManager::getSingleton().registHandler(handler);
         }
+        // 创建桃江麻将游戏房间内部网络消息处理器
+        for (int i = 0; i < threadNum; i++) {
+            handler = std::make_shared<NiuMa::TaoJiangMahjongRoomHandler>();
+            handler->registSelf();
+            handlers.push_back(handler);
+            NiuMa::VenueManager::getSingleton().registHandler(handler);
+        }
+        // 创建红中麻将游戏房间内部网络消息处理器
+        for (int i = 0; i < threadNum; i++) {
+            handler = std::make_shared<NiuMa::HongZhongMahjongRoomHandler>();
+            handler->registSelf();
+            handlers.push_back(handler);
+            NiuMa::VenueManager::getSingleton().registHandler(handler);
+        }
+        // 创建跑得快游戏房间内部网络消息处理器
+        for (int i = 0; i < threadNum; i++) {
+            handler = std::make_shared<NiuMa::PaoDeKuaiRoomHandler>();
+            handler->registSelf();
+            handlers.push_back(handler);
+            NiuMa::VenueManager::getSingleton().registHandler(handler);
+        }
+        // 创建长沙麻将游戏房间内部网络消息处理器
+        for (int i = 0; i < threadNum; i++) {
+            handler = std::make_shared<NiuMa::ChangShaMahjongRoomHandler>();
+            handler->registSelf();
+            handlers.push_back(handler);
+            NiuMa::VenueManager::getSingleton().registHandler(handler);
+        }
+        // 创建益阳歪胡子游戏房间内部网络消息处理器
+        for (int i = 0; i < threadNum; i++) {
+            handler = std::make_shared<NiuMa::YiYangWaiHuZiRoomHandler>();
+            handler->registSelf();
+            handlers.push_back(handler);
+            NiuMa::VenueManager::getSingleton().registHandler(handler);
+        }
+        // 创建沅江千分游戏房间内部网络消息处理器
+        for (int i = 0; i < threadNum; i++) {
+            handler = std::make_shared<NiuMa::YuanJiangQianFenRoomHandler>();
+            handler->registSelf();
+            handlers.push_back(handler);
+            NiuMa::VenueManager::getSingleton().registHandler(handler);
+        }
         // 创建场地内消息处理器线程池
         std::shared_ptr<NiuMa::MessageThreadPool> innerPool = std::make_shared<NiuMa::MessageThreadPool>();
         innerPool->start(threadNum, handlers);
@@ -393,6 +469,12 @@ int main(int argc, char* argv[]) {
         NiuMa::LackeyMessages::registMessages();
         NiuMa::NiuNiu100Messages::registMessages();
         NiuMa::GuanDanMessages::registMessages();
+        NiuMa::TaoJiangMahjongMessages::registMessages();
+        NiuMa::HongZhongMahjongMessages::registMessages();
+        NiuMa::PaoDeKuaiMessages::registMessages();
+        NiuMa::ChangShaMahjongMessages::registMessages();
+        NiuMa::YiYangWaiHuZiMessages::registMessages();
+        NiuMa::YuanJiangQianFenMessages::registMessages();
 
         // 初始化掼蛋游戏出牌组合候选顺序表
         NiuMa::GuanDanCandidateOrder::getSingleton();
@@ -465,6 +547,7 @@ int main(int argc, char* argv[]) {
         // 释放单例实例
         NiuMa::VenueManager::deinstantiate();
         NiuMa::PlayerManager::deinstantiate();
+        NiuMa::VersionManager::deinstantiate();
         NiuMa::SecurityManager::deinstantiate();
         NiuMa::RabbitmqClient::deinstantiate();
         NiuMa::RabbitmqConsumer::deinstantiate();

@@ -10,6 +10,7 @@
 #include "Message/MsgDisconnect.h"
 #include "Player/PlayerManager.h"
 #include "Player/PlayerMessages.h"
+#include "Game/VersionManager.h"
 
 #include <boost/locale.hpp>
 
@@ -62,6 +63,11 @@ namespace NiuMa
 		player->setSession(session);
 		PlayerManager::getSingleton().setSessionPlayerId(sessionId, playerId);
 		MsgPlayerConnectResp resp;
+		// 填充版本信息
+		resp.engineVersion = VersionManager::getSingleton().getCurrentVersion();
+		resp.minVersion = VersionManager::getSingleton().getMinCompatibleVersion();
+		resp.playerVersion = VersionManager::getSingleton().getPlayerVersion(playerId);
+		resp.forceUpdate = VersionManager::getSingleton().isVersionCompatible(resp.playerVersion, playerId) ? 0 : 1;
 		resp.send(session);
 		InfoS << "Player(id:" << playerId << ") connected, session id: " << sessionId;
 		std::string venueId;

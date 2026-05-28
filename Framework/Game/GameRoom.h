@@ -40,6 +40,22 @@ namespace NiuMa {
 	};
 
 	/**
+	 * 房间状态（标准化生命周期状态）
+	 * 各游戏可在内部使用自定义的 GameState 枚举管理游戏流程，
+	 * 同时通过 RoomState 提供统一的状态查询接口
+	 */
+	enum class RoomState : int
+	{
+		Waiting = 0,	// 等待玩家加入/准备
+		Ready,			// 玩家已就绪，等待开始
+		Playing,		// 游戏进行中
+		Settling,		// 结算中
+		Finished,		// 游戏已结束（达到目标分或局数限制）
+		Dissolved,		// 投票解散
+		Exception		// 异常中断
+	};
+
+	/**
 	 * 棋牌类游房间基类
 	 */
 	class GameRoom : public Venue {
@@ -57,6 +73,10 @@ namespace NiuMa {
 		int getAvatarCount() const;
 		int getSpectatorCount() const;
 		bool hasSpectator(const std::string& playerId) const;
+
+		// 获取/设置标准化房间状态
+		RoomState getRoomState() const;
+		void setRoomState(RoomState state);
 
 	protected:
 		/**
@@ -486,6 +506,9 @@ namespace NiuMa {
 	private:
 		// 游戏房类别(A类房、B类房)
 		const RoomCategory _category;
+
+		// 标准化房间状态
+		RoomState _roomState;
 
 		// A类房上的最大玩家数量(例如麻将游戏一般最多4人玩)，0表示无限制
 		const int _maxPlayerNums;

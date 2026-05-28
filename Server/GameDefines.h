@@ -20,7 +20,13 @@ namespace NiuMa
 		LiuAnBiJi = 1027,	// 六安比鸡
 		Lackey = 1028,		// 逮狗腿
 		Tractor = 1029,		// 拖拉机
-		GuanDan = 1030		// 掼蛋
+		GuanDan = 1030,		// 掼蛋
+		TaoJiangMahjong = 1031,	// 桃江麻将
+		HongZhongMahjong = 1032,	// 红中麻将
+		PaoDeKuai = 1033,		// 跑得快
+		ChangShaMahjong = 1034,	// 长沙麻将
+		YiYangWaiHuZi = 1035,	// 益阳歪胡子
+		YuanJiangQianFen = 1036	// 沅江千分
 	};
 
 

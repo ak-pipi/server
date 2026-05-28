@@ -61,13 +61,15 @@ namespace NiuMa {
 		_consumerTag = consumerTag;
 
 		time_t delta = 0L;
+		int64_t tsVal = 0;
 		time_t timestamp = 0L;
 		time_t nowTime = BaseUtils::getCurrentSecond();
 		std::vector<std::string> fields;
 		RedisPool::getSingleton().hkeys(RedisKeys::IP_BLACKLIST, fields);
 		for (const std::string& ip : fields) {
-			if (!RedisPool::getSingleton().hget(RedisKeys::IP_BLACKLIST, ip, timestamp))
+			if (!RedisPool::getSingleton().hget(RedisKeys::IP_BLACKLIST, ip, tsVal))
 				continue;
+			timestamp = static_cast<time_t>(tsVal);
 			delta = nowTime - timestamp;
 			if (delta > 300) {
 				// 超过5分钟

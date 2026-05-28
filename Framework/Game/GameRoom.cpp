@@ -20,12 +20,21 @@ namespace NiuMa
 	GameRoom::GameRoom(const std::string& id, int gameType, int maxPlayerNums, RoomCategory category)
 		: Venue(id, gameType)
 		, _category(category)
+		, _roomState(RoomState::Waiting)
 		, _maxPlayerNums(maxPlayerNums)
 		, _cashPledge(0)
 		, _diamondNeed(0)
 	{}
 
 	GameRoom::~GameRoom() {}
+
+	RoomState GameRoom::getRoomState() const {
+		return _roomState;
+	}
+
+	void GameRoom::setRoomState(RoomState state) {
+		_roomState = state;
+	}
 
 	RoomCategory GameRoom::getCategory() const {
 		return _category;

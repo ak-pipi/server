@@ -144,7 +144,19 @@ namespace NiuMa
 		// 占位符
 		int placeholder = 0;
 
-		MSGPACK_DEFINE_MAP(placeholder);
+		// 当前游戏引擎版本号
+		std::string engineVersion;
+
+		// 最低兼容版本号
+		std::string minVersion;
+
+		// 该玩家的实际版本（灰度发布时可能与当前版本不同）
+		std::string playerVersion;
+
+		// 是否需要强制更新
+		int forceUpdate = 0;
+
+		MSGPACK_DEFINE_MAP(placeholder, engineVersion, minVersion, playerVersion, forceUpdate);
 	};
 }
 
