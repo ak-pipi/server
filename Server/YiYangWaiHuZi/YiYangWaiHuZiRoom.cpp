@@ -1,4 +1,4 @@
-﻿// YiYangWaiHuZiRoom.cpp
+// YiYangWaiHuZiRoom.cpp
 
 #include "YiYangWaiHuZiRoom.h"
 #include "YiYangWaiHuZiAvatar.h"
@@ -6,6 +6,7 @@
 #include "Game/ReplayUtils.h"
 #include "Game/WalletEventTask.h"
 #include "Game/RiskControlCollector.h"
+#include "YiYangWaiHuZiRecordTask.h"
 #include "Game/RandomAuditLogger.h"
 #include "GameDefines.h"
 #include "Network/MsgSession.h"
@@ -16,6 +17,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <sstream>
+#include <msgpack.hpp>
 
 namespace NiuMa
 {
@@ -58,17 +61,17 @@ namespace NiuMa
 	}
 
 	bool YiYangWaiHuZiRoom::checkEnter(const std::string& playerId, std::string& errMsg, bool robot) const {
-		if (_avatars.size() >= static_cast<size_t>(_playerCount)) { errMsg = "房间已满"; return false; }
+		if (getAvatarCount() >= _playerCount) { errMsg = "房间已满"; return false; }
 		return true;
 	}
 
-	int YiYangWaiHuZiRoom::checkLeave(const std::string& playerId, std::string& errMsg) {
+	int YiYangWaiHuZiRoom::checkLeave(const std::string& playerId, std::string& errMsg) const {
 		if (_gameState == GameState::Playing) { errMsg = "游戏进行中"; return 2; }
 		return 0;
 	}
 
 	void YiYangWaiHuZiRoom::onAvatarLeaved(int seat, const std::string& playerId) {
-		if (_avatars.empty()) _gameState = GameState::None;
+		if (getAvatarCount() == 0) _gameState = GameState::None;
 	}
 
 	void YiYangWaiHuZiRoom::clean() {
@@ -78,8 +81,8 @@ namespace NiuMa
 		_tileIndex = 0;
 		_drawCount = 0;
 		_playbackData = WaiHuZiPlaybackData();
-		for (auto& kv : _avatars) {
-			auto a = getAvatar(kv.first);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
 			if (a) a->clear();
 		}
 	}
@@ -88,17 +91,15 @@ namespace NiuMa
 	void YiYangWaiHuZiRoom::setState(GameState s) { _gameState = s; _stateTime = std::time(nullptr); }
 
 	std::shared_ptr<YiYangWaiHuZiAvatar> YiYangWaiHuZiRoom::getAvatar(int seat) const {
-		auto it = _avatars.find(seat);
-		if (it == _avatars.end()) return nullptr;
-		return std::dynamic_pointer_cast<YiYangWaiHuZiAvatar>(it->second);
+		return std::dynamic_pointer_cast<YiYangWaiHuZiAvatar>(GameRoom::getAvatar(seat));
 	}
 
 	int YiYangWaiHuZiRoom::getNextSeat(int seat) const { return (seat + 1) % _playerCount; }
 
 	bool YiYangWaiHuZiRoom::allReady() const {
-		if (_avatars.size() < static_cast<size_t>(_playerCount)) return false;
-		for (auto& kv : _avatars) {
-			auto a = getAvatar(kv.first);
+		if (getAvatarCount() < _playerCount) return false;
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
 			if (a && !a->isReady()) return false;
 		}
 		return true;
@@ -153,20 +154,21 @@ namespace NiuMa
 
 		// 清理
 		_playbackData = WaiHuZiPlaybackData();
-		_playbackData.venueId = _venueId;
+		_playbackData.venueId = getId();
 		_playbackData.roundNo = _roundNo;
 		_playbackData.banker = _banker;
 		_playbackData.playerCount = _playerCount;
 
-		for (auto& kv : _avatars) {
-			auto a = getAvatar(kv.first);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
 			if (a) { a->clear(); a->setReady(false); }
 		}
 
 		// 风控采集：开始新局
-		_riskCollector.startRound(_venueId, static_cast<int>(GameType::YiYangWaiHuZi), _roundNo);
-		for (auto& kv : _avatars) {
-			_riskCollector.recordPlayer(kv.second->getPlayerId(), kv.first);
+		_riskCollector.startRound(getId(), static_cast<int>(GameType::YiYangWaiHuZi), _roundNo);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av) _riskCollector.recordPlayer(_av->getPlayerId(), _si);
 		}
 
 		// 初始化牌池并洗牌
@@ -182,15 +184,15 @@ namespace NiuMa
 		// 庄家先摸牌
 		drawCard(_currentPlayer);
 
-		LOG_INFO("益阳歪胡子游戏开始，场地: " << _venueId << "，局号: " << _roundNo);
+		{ std::ostringstream _oss; _oss << "益阳歪胡子游戏开始，场地: " << getId() << "，局号: " << _roundNo; LOG_INFO(_oss.str().c_str()); }
 	}
 
 	void YiYangWaiHuZiRoom::dealCards() {
 		// 3人各发20张，剩余牌堆
 		int cardsPerPlayer = 20;
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			auto a = getAvatar(kv.first);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
 			if (!a) continue;
 			WaiHuZiCardArray hand;
 			for (int i = 0; i < cardsPerPlayer && _tileIndex < static_cast<int>(_tilePool.size()); i++) {
@@ -199,14 +201,16 @@ namespace NiuMa
 			a->setHandCards(hand);
 			std::vector<int> ids;
 			for (auto& c : hand) ids.push_back(c.getId());
-			_playbackData.playerIds[idx] = kv.second->getPlayerId();
+			_playbackData.playerIds[idx] = a->getPlayerId();
 			_playbackData.initCards[idx] = ids;
 			idx++;
 		}
 
 		// 通知发牌
-		for (auto& kv : _avatars)
-			notifyDeal(kv.second->getPlayerId());
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av) notifyDeal(_av->getPlayerId());
+		}
 	}
 
 	void YiYangWaiHuZiRoom::checkAvailableActions(int seat) {
@@ -365,10 +369,10 @@ namespace NiuMa
 		int baseScore = huxi * _tunScoreRate;
 		if (baseScore > _maxScore) baseScore = _maxScore;
 
-		for (auto& kv : _avatars) {
-			auto a = getAvatar(kv.first);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
 			if (!a) continue;
-			if (kv.first == huSeat) {
+			if (_si == huSeat) {
 				a->setRoundScore(baseScore * (_playerCount - 1));
 				a->setWinGold(baseScore * (_playerCount - 1) * _level);
 			}
@@ -386,15 +390,15 @@ namespace NiuMa
 
 	void YiYangWaiHuZiRoom::saveRoundRecord() {
 		auto task = std::make_shared<YiYangWaiHuZiRecordTask>();
-		task->_venueId = _venueId;
+		task->_venueId = getId();
 		task->_roundNo = _roundNo;
 		task->_banker = _banker;
-		_playbackData.randomSeedHash = ReplayUtils::generateSeedHash(_venueId, _roundNo, _banker);
+		_playbackData.randomSeedHash = ReplayUtils::generateSeedHash(getId(), _roundNo, _banker);
 		task->_randomSeedHash = _playbackData.randomSeedHash;
 
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			auto a = getAvatar(kv.first);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
 			if (a && idx < 3) {
 				task->_playerIds[idx] = a->getPlayerId();
 				task->_scores[idx] = a->getRoundScore();
@@ -405,14 +409,16 @@ namespace NiuMa
 		}
 
 		std::string replayData;
-		ReplayUtils::compressReplay(_playbackData, replayData);
+		msgpack::sbuffer _sbuf;
+		msgpack::pack(_sbuf, _playbackData);
+		ReplayUtils::compressReplay(_sbuf.data(), static_cast<int>(_sbuf.size()), replayData);
 		task->_playback = replayData;
 		MysqlPool::getSingleton().asyncQuery(task);
 
 		// 风控采集：记录得分并结束
 		_riskCollector.setRandomSeedHash(_playbackData.randomSeedHash);
-		for (auto& kv : _avatars) {
-			auto a = getAvatar(kv.first);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
 			if (a)
 				_riskCollector.recordScore(a->getPlayerId(), a->getRoundScore(), static_cast<int64_t>(a->getWinGold()));
 		}
@@ -421,19 +427,20 @@ namespace NiuMa
 		// 随机审计日志
 		std::vector<int> cardOrder;
 		std::vector<std::string> playerIds;
-		for (auto& kv : _avatars) {
-			playerIds.push_back(kv.second->getPlayerId());
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av) playerIds.push_back(_av->getPlayerId());
 		}
-		RandomAuditLogger::logAudit(_venueId, static_cast<int>(GameType::YiYangWaiHuZi),
+		RandomAuditLogger::logAudit(getId(), static_cast<int>(GameType::YiYangWaiHuZi),
 			_roundNo, _banker, _playbackData.randomSeedHash, cardOrder, playerIds);
 
 		// MQ事件
-		for (auto& kv : _avatars) {
-			auto a = getAvatar(kv.first);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
 			if (!a) continue;
 			double g = a->getWinGold();
-			if (g > 0) WalletEventTask::publish(a->getPlayerId(), "GAME_WIN", static_cast<int64_t>(g), "YiYangWaiHuZi", _venueId, "歪胡子赢得金币");
-			else if (g < 0) WalletEventTask::publish(a->getPlayerId(), "GAME_LOSE", static_cast<int64_t>(-g), "YiYangWaiHuZi", _venueId, "歪胡子输掉金币");
+			if (g > 0) WalletEventTask::publish(a->getPlayerId(), "GAME_WIN", static_cast<int64_t>(g), "YiYangWaiHuZi", getId(), "歪胡子赢得金币");
+			else if (g < 0) WalletEventTask::publish(a->getPlayerId(), "GAME_LOSE", static_cast<int64_t>(-g), "YiYangWaiHuZi", getId(), "歪胡子输掉金币");
 		}
 	}
 
@@ -449,7 +456,7 @@ namespace NiuMa
 	void YiYangWaiHuZiRoom::onSyncTable(const NetMessage::Ptr& netMsg) {
 		auto msg = std::dynamic_pointer_cast<MsgWaiHuZiSync>(netMsg);
 		if (!msg) return;
-		auto session = msg->getSession();
+		auto session = netMsg->getSession();
 		if (!session) return;
 		auto resp = std::make_shared<MsgWaiHuZiSyncResp>();
 		resp->gameState = static_cast<int>(_gameState);
@@ -459,23 +466,27 @@ namespace NiuMa
 		resp->currentPlayer = _currentPlayer;
 		resp->lastDiscardId = _lastDiscardId;
 		resp->lastDiscardSeat = _lastDiscardSeat;
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == msg->playerId) {
-				resp->mySeat = kv.first;
-				auto a = getAvatar(kv.first);
+		const std::string& playerId = msg->getPlayerId();
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av && _av->getPlayerId() == playerId) {
+				resp->mySeat = _si;
+				auto a = getAvatar(_si);
 				if (a) for (auto& c : a->getHandCards()) resp->myCards.push_back(c.getId());
 				break;
 			}
 		}
-		session->sendMsg(resp);
+		resp->send(session);
 	}
 
 	void YiYangWaiHuZiRoom::onReady(const NetMessage::Ptr& netMsg) {
 		auto msg = std::dynamic_pointer_cast<MsgWaiHuZiReady>(netMsg);
 		if (!msg) return;
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == msg->playerId) {
-				auto a = getAvatar(kv.first);
+		const std::string& playerId = msg->getPlayerId();
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av && _av->getPlayerId() == playerId) {
+				auto a = getAvatar(_si);
 				if (a) a->setReady(true);
 				break;
 			}
@@ -488,8 +499,10 @@ namespace NiuMa
 		if (_gameState != GameState::Playing) return;
 		auto msg = std::dynamic_pointer_cast<MsgWaiHuZiDiscard>(netMsg);
 		if (!msg) return;
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == msg->playerId) { doDiscard(kv.first, msg->cardId); break; }
+		const std::string& playerId = msg->getPlayerId();
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av && _av->getPlayerId() == playerId) { doDiscard(_si, msg->cardId); break; }
 		}
 	}
 
@@ -497,15 +510,22 @@ namespace NiuMa
 		if (_gameState != GameState::Playing) return;
 		auto msg = std::dynamic_pointer_cast<MsgWaiHuZiAction>(netMsg);
 		if (!msg) return;
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == msg->playerId) { doAction(kv.first, msg->action, msg->cardIds); break; }
+		const std::string& playerId = msg->getPlayerId();
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av && _av->getPlayerId() == playerId) { doAction(_si, msg->action, msg->cardIds); break; }
 		}
 	}
 
 	// 消息发送
 	void YiYangWaiHuZiRoom::notifyDeal(const std::string& playerId) {
+		auto _av = GameRoom::getAvatar(playerId);
+		if (!_av) return;
 		int seat = -1;
-		for (auto& kv : _avatars) { if (kv.second->getPlayerId() == playerId) { seat = kv.first; break; } }
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto tmp = GameRoom::getAvatar(_si);
+			if (tmp && tmp->getPlayerId() == playerId) { seat = _si; break; }
+		}
 		if (seat < 0) return;
 		auto a = getAvatar(seat);
 		if (!a) return;
@@ -514,7 +534,7 @@ namespace NiuMa
 		msg->firstPlayer = _currentPlayer;
 		msg->roundNo = _roundNo;
 		msg->banker = _banker;
-		sendToPlayer(playerId, msg);
+		sendMessage(*msg, playerId);
 	}
 
 	void YiYangWaiHuZiRoom::notifyDraw(int seat, int cardId) {
@@ -522,7 +542,7 @@ namespace NiuMa
 		msg->seat = seat;
 		msg->cardId = cardId;
 		msg->remainCount = static_cast<int>(_tilePool.size()) - _tileIndex;
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 		// 摸牌者发实际牌面，其他人只通知摸牌
 		auto a = getAvatar(seat);
 		if (a) {
@@ -535,7 +555,7 @@ namespace NiuMa
 		msg->seat = seat;
 		msg->cardId = cardId;
 		msg->nextPlayer = _currentPlayer;
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 	}
 
 	void YiYangWaiHuZiRoom::notifyAction(int seat, int action, const std::vector<int>& cardIds) {
@@ -544,21 +564,21 @@ namespace NiuMa
 		msg->action = action;
 		msg->cardIds = cardIds;
 		msg->nextPlayer = _currentPlayer;
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 	}
 
 	void YiYangWaiHuZiRoom::notifySettlement(int huSeat) {
 		auto msg = std::make_shared<MsgWaiHuZiSettlement>();
 		msg->huSeat = huSeat;
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			auto a = getAvatar(kv.first);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
 			if (a && idx < 3) {
 				msg->scores[idx] = a->getRoundScore();
 				msg->winGolds[idx] = a->getWinGold();
 			}
 			idx++;
 		}
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 	}
 }

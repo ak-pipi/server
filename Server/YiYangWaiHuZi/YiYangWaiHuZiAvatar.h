@@ -29,7 +29,7 @@ namespace NiuMa
 		YiYangWaiHuZiAvatar(const std::string& playerId, int seat, bool robot);
 		virtual ~YiYangWaiHuZiAvatar();
 
-		virtual void clear() override;
+		void clear();
 
 	public:
 		// 手牌操作

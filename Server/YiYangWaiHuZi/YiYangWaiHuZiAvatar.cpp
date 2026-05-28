@@ -6,7 +6,7 @@
 namespace NiuMa
 {
 	YiYangWaiHuZiAvatar::YiYangWaiHuZiAvatar(const std::string& playerId, int seat, bool robot)
-		: GameAvatar(playerId, seat, robot)
+		: GameAvatar(playerId, robot)
 		, _ready(false)
 		, _hu(false)
 		, _discarded(false)
@@ -18,7 +18,6 @@ namespace NiuMa
 	YiYangWaiHuZiAvatar::~YiYangWaiHuZiAvatar() {}
 
 	void YiYangWaiHuZiAvatar::clear() {
-		GameAvatar::clear();
 		_handCards.clear();
 		_exposedCombs.clear();
 		_ready = false;

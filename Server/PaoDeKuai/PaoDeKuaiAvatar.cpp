@@ -47,11 +47,11 @@ namespace NiuMa
 		// 王炸组合
 		if (!_jokerCards[0].empty() && !_jokerCards[1].empty()) {
 			PokerCombination::Ptr comb = allocateCombination();
-			comb->genre = static_cast<int>(PaoDeKuaiGenre::Rocket);
+			comb->setGenre(static_cast<int>(PaoDeKuaiGenre::Rocket));
 			std::vector<int> ids;
 			ids.push_back(_jokerCards[0][0]);
 			ids.push_back(_jokerCards[1][0]);
-			comb->cardIds = ids;
+			comb->addCards(ids);
 			insertCombination(comb);
 		}
 	}
@@ -66,47 +66,47 @@ namespace NiuMa
 		// 单张
 		for (int i = 0; i < nums; i++) {
 			PokerCombination::Ptr comb = allocateCombination();
-			comb->genre = static_cast<int>(PaoDeKuaiGenre::Single);
-			comb->officerOrder = order;
+			comb->setGenre(static_cast<int>(PaoDeKuaiGenre::Single));
+			comb->setOfficerPoint(order);
 			std::vector<int> ids;
 			ids.push_back(cardIds[i]);
-			comb->cardIds = ids;
+			comb->addCards(ids);
 			insertCombination(comb);
 		}
 
 		// 对子
 		if (nums >= 2) {
 			PokerCombination::Ptr comb = allocateCombination();
-			comb->genre = static_cast<int>(PaoDeKuaiGenre::Pair);
-			comb->officerOrder = order;
+			comb->setGenre(static_cast<int>(PaoDeKuaiGenre::Pair));
+			comb->setOfficerPoint(order);
 			std::vector<int> ids;
 			ids.push_back(cardIds[nums - 2]);
 			ids.push_back(cardIds[nums - 1]);
-			comb->cardIds = ids;
+			comb->addCards(ids);
 			insertCombination(comb);
 		}
 
 		// 三条
 		if (nums >= 3) {
 			PokerCombination::Ptr comb = allocateCombination();
-			comb->genre = static_cast<int>(PaoDeKuaiGenre::Triple);
-			comb->officerOrder = order;
+			comb->setGenre(static_cast<int>(PaoDeKuaiGenre::Triple));
+			comb->setOfficerPoint(order);
 			std::vector<int> ids;
 			for (int i = nums - 3; i < nums; i++)
 				ids.push_back(cardIds[i]);
-			comb->cardIds = ids;
+			comb->addCards(ids);
 			insertCombination(comb);
 		}
 
 		// 炸弹
 		if (nums >= 4) {
 			PokerCombination::Ptr comb = allocateCombination();
-			comb->genre = static_cast<int>(PaoDeKuaiGenre::Bomb);
-			comb->officerOrder = order;
+			comb->setGenre(static_cast<int>(PaoDeKuaiGenre::Bomb));
+			comb->setOfficerPoint(order);
 			std::vector<int> ids;
 			for (int i = nums - 4; i < nums; i++)
 				ids.push_back(cardIds[i]);
-			comb->cardIds = ids;
+			comb->addCards(ids);
 			insertCombination(comb);
 		}
 	}
@@ -131,9 +131,9 @@ namespace NiuMa
 				}
 				if (ok) {
 					PokerCombination::Ptr comb = allocateCombination();
-					comb->genre = static_cast<int>(PaoDeKuaiGenre::Straight);
-					comb->officerOrder = start + len - 1;
-					comb->cardIds = ids;
+					comb->setGenre(static_cast<int>(PaoDeKuaiGenre::Straight));
+					comb->setOfficerPoint(start + len - 1);
+					comb->addCards(ids);
 					insertCombination(comb);
 				}
 			}
@@ -159,9 +159,9 @@ namespace NiuMa
 				}
 				if (ok) {
 					PokerCombination::Ptr comb = allocateCombination();
-					comb->genre = static_cast<int>(PaoDeKuaiGenre::StraightPair);
-					comb->officerOrder = start + len - 1;
-					comb->cardIds = ids;
+					comb->setGenre(static_cast<int>(PaoDeKuaiGenre::StraightPair));
+					comb->setOfficerPoint(start + len - 1);
+					comb->addCards(ids);
 					insertCombination(comb);
 				}
 			}
@@ -184,11 +184,11 @@ namespace NiuMa
 				if (o2 == o || _pointOrderNums[o2] <= 0)
 					continue;
 				PokerCombination::Ptr comb = allocateCombination();
-				comb->genre = static_cast<int>(PaoDeKuaiGenre::TripleOne);
-				comb->officerOrder = o;
+				comb->setGenre(static_cast<int>(PaoDeKuaiGenre::TripleOne));
+				comb->setOfficerPoint(o);
 				std::vector<int> ids = tripleIds;
 				ids.push_back(_pointOrderCards[o2][0]);
-				comb->cardIds = ids;
+				comb->addCards(ids);
 				insertCombination(comb);
 			}
 
@@ -197,13 +197,13 @@ namespace NiuMa
 				if (o2 == o || _pointOrderNums[o2] < 2)
 					continue;
 				PokerCombination::Ptr comb = allocateCombination();
-				comb->genre = static_cast<int>(PaoDeKuaiGenre::TriplePair);
-				comb->officerOrder = o;
+				comb->setGenre(static_cast<int>(PaoDeKuaiGenre::TriplePair));
+				comb->setOfficerPoint(o);
 				std::vector<int> ids = tripleIds;
 				int n2 = _pointOrderNums[o2];
 				ids.push_back(_pointOrderCards[o2][n2 - 2]);
 				ids.push_back(_pointOrderCards[o2][n2 - 1]);
-				comb->cardIds = ids;
+				comb->addCards(ids);
 				insertCombination(comb);
 			}
 		}
@@ -247,27 +247,27 @@ namespace NiuMa
 				// 飞机不带
 				{
 					PokerCombination::Ptr comb = allocateCombination();
-					comb->genre = static_cast<int>(PaoDeKuaiGenre::Plane);
-					comb->officerOrder = tripleOrders[i + len - 1];
-					comb->cardIds = tripleIds;
+					comb->setGenre(static_cast<int>(PaoDeKuaiGenre::Plane));
+					comb->setOfficerPoint(tripleOrders[i + len - 1]);
+					comb->addCards(tripleIds);
 					insertCombination(comb);
 				}
 
 				// 飞机带单
 				{
 					PokerCombination::Ptr comb = allocateCombination();
-					comb->genre = static_cast<int>(PaoDeKuaiGenre::PlaneOne);
-					comb->officerOrder = tripleOrders[i + len - 1];
-					comb->cardIds = tripleIds; // 简化：不带副牌的组合也让其能出
+					comb->setGenre(static_cast<int>(PaoDeKuaiGenre::PlaneOne));
+					comb->setOfficerPoint(tripleOrders[i + len - 1]);
+					comb->addCards(tripleIds); // 简化：不带副牌的组合也让其能出
 					insertCombination(comb);
 				}
 
 				// 飞机带对
 				{
 					PokerCombination::Ptr comb = allocateCombination();
-					comb->genre = static_cast<int>(PaoDeKuaiGenre::PlanePair);
-					comb->officerOrder = tripleOrders[i + len - 1];
-					comb->cardIds = tripleIds;
+					comb->setGenre(static_cast<int>(PaoDeKuaiGenre::PlanePair));
+					comb->setOfficerPoint(tripleOrders[i + len - 1]);
+					comb->addCards(tripleIds);
 					insertCombination(comb);
 				}
 			}
@@ -288,9 +288,9 @@ namespace NiuMa
 		int targetGenre = pg.getGenre();
 		for (auto& kv : _combinations) {
 			for (auto& comb : kv.second) {
-				if (comb->genre == targetGenre ||
-					comb->genre == static_cast<int>(PaoDeKuaiGenre::Bomb) ||
-					comb->genre == static_cast<int>(PaoDeKuaiGenre::Rocket)) {
+				if (comb->getGenre() == targetGenre ||
+					comb->getGenre() == static_cast<int>(PaoDeKuaiGenre::Bomb) ||
+					comb->getGenre() == static_cast<int>(PaoDeKuaiGenre::Rocket)) {
 					_candidates.push_back(comb);
 				}
 			}

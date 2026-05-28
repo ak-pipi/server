@@ -84,6 +84,7 @@ update_cached(POKER_LIBRARY "")
 # add 3rdpart to this project
 add_subdirectory(3rdpart)
 
+set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost REQUIRED COMPONENTS log log_setup filesystem system)
 if(Boost_FOUND)
   message("${Boost_INCLUDE_DIRS}")

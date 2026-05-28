@@ -6,6 +6,8 @@
 #include "PokerGenre.h"
 #include "PokerDealer.h"
 #include "PokerRule.h"
+#include "../PaoDeKuai/PaoDeKuaiRule.h"
+#include "../PaoDeKuai/PaoDeKuaiAvatar.h"
 #include "YuanJiangQianFenPlayback.h"
 #include "Game/RiskControlCollector.h"
 #include <string>
@@ -26,7 +28,7 @@ namespace NiuMa
 	protected:
 		virtual GameAvatar::Ptr createAvatar(const std::string& playerId, int seat, bool robot) const override;
 		virtual bool checkEnter(const std::string& playerId, std::string& errMsg, bool robot = false) const override;
-		virtual int checkLeave(const std::string& playerId, std::string& errMsg) override;
+		virtual int checkLeave(const std::string& playerId, std::string& errMsg) const override;
 		virtual void onAvatarLeaved(int seat, const std::string& playerId) override;
 		virtual void clean() override;
 
@@ -79,8 +81,8 @@ namespace NiuMa
 		PokerGenre _lastPlayGenre;
 		int _roundCount;				// 当前已玩局数
 
+		std::shared_ptr<PaoDeKuaiRule> _rule;
 		PokerDealer _dealer;
-		std::shared_ptr<PokerRule> _rule;
 
 		// 每个玩家的累计得分
 		int _totalScores[4];

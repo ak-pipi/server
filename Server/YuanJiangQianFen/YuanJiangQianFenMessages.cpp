@@ -1,7 +1,8 @@
 ﻿// YuanJiangQianFenMessages.cpp
 
 #include "YuanJiangQianFenMessages.h"
-#include "Message/MessageCreator.h"
+#include "Message/MessageManager.h"
+#include "Message/MsgCreator.h"
 
 namespace NiuMa
 {
@@ -24,9 +25,13 @@ namespace NiuMa
 	MsgQianFenFinalResult::MsgQianFenFinalResult() { for (int i = 0; i < 4; i++) { totalScores[i] = 0; totalGolds[i] = 0; } }
 
 	void YuanJiangQianFenMessages::registMessages() {
-		MessageCreator::getSingleton().registCreator(MsgQianFenSync::TYPE, []() -> Message::Ptr { return std::make_shared<MsgQianFenSync>(); });
-		MessageCreator::getSingleton().registCreator(MsgQianFenReady::TYPE, []() -> Message::Ptr { return std::make_shared<MsgQianFenReady>(); });
-		MessageCreator::getSingleton().registCreator(MsgQianFenCallScore::TYPE, []() -> Message::Ptr { return std::make_shared<MsgQianFenCallScore>(); });
-		MessageCreator::getSingleton().registCreator(MsgQianFenPlay::TYPE, []() -> Message::Ptr { return std::make_shared<MsgQianFenPlay>(); });
+		IMsgCreator::Ptr creator1 = IMsgCreator::Ptr(new MsgCreator<MsgQianFenSync>());
+		MessageManager::getSingleton().registCreator(MsgQianFenSync::TYPE, creator1);
+		IMsgCreator::Ptr creator2 = IMsgCreator::Ptr(new MsgCreator<MsgQianFenReady>());
+		MessageManager::getSingleton().registCreator(MsgQianFenReady::TYPE, creator2);
+		IMsgCreator::Ptr creator3 = IMsgCreator::Ptr(new MsgCreator<MsgQianFenCallScore>());
+		MessageManager::getSingleton().registCreator(MsgQianFenCallScore::TYPE, creator3);
+		IMsgCreator::Ptr creator4 = IMsgCreator::Ptr(new MsgCreator<MsgQianFenPlay>());
+		MessageManager::getSingleton().registCreator(MsgQianFenPlay::TYPE, creator4);
 	}
 }

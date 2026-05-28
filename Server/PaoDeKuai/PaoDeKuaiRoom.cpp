@@ -7,6 +7,7 @@
 #include "Game/ReplayUtils.h"
 #include "Game/WalletEventTask.h"
 #include "Game/DebtLiquidation.h"
+#include "PaoDeKuaiRecordTask.h"
 #include "Game/RiskControlCollector.h"
 #include "Game/RandomAuditLogger.h"
 #include "Network/MsgSession.h"
@@ -15,6 +16,7 @@
 
 #include <json/json.h>
 #include <algorithm>
+#include <sstream>
 
 namespace NiuMa
 {
@@ -55,14 +57,14 @@ namespace NiuMa
 	}
 
 	bool PaoDeKuaiRoom::checkEnter(const std::string& playerId, std::string& errMsg, bool robot) const {
-		if (_avatars.size() >= static_cast<size_t>(_rule->getPlayerCount())) {
+		if (getAvatarCount() >= _rule->getPlayerCount()) {
 			errMsg = "房间已满";
 			return false;
 		}
 		return true;
 	}
 
-	int PaoDeKuaiRoom::checkLeave(const std::string& playerId, std::string& errMsg) {
+	int PaoDeKuaiRoom::checkLeave(const std::string& playerId, std::string& errMsg) const {
 		if (_gameState == GameState::Playing) {
 			errMsg = "游戏进行中，无法离开";
 			return 2; // 不能离开
@@ -73,7 +75,7 @@ namespace NiuMa
 	void PaoDeKuaiRoom::onAvatarLeaved(int seat, const std::string& playerId) {
 		if (_gameState == GameState::Ready || _gameState == GameState::None) {
 			// 重置状态
-			if (_avatars.empty())
+			if (getAvatarCount() == 0)
 				setState(GameState::None);
 		}
 	}
@@ -90,8 +92,9 @@ namespace NiuMa
 		_dissolveVotes[0] = 0;
 		_dissolveVotes[1] = 0;
 		_playback = PaoDeKuaiPlaybackData();
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar)
 				avatar->clear();
 		}
@@ -126,10 +129,7 @@ namespace NiuMa
 	}
 
 	std::shared_ptr<PaoDeKuaiAvatar> PaoDeKuaiRoom::getAvatar(int seat) const {
-		auto it = _avatars.find(seat);
-		if (it == _avatars.end())
-			return nullptr;
-		return std::dynamic_pointer_cast<PaoDeKuaiAvatar>(it->second);
+		return std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(seat));
 	}
 
 	void PaoDeKuaiRoom::setState(GameState s) {
@@ -138,10 +138,11 @@ namespace NiuMa
 	}
 
 	bool PaoDeKuaiRoom::allReady() const {
-		if (_avatars.size() < static_cast<size_t>(_rule->getPlayerCount()))
+		if (getAvatarCount() < _rule->getPlayerCount())
 			return false;
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar && !avatar->isReady())
 				return false;
 		}
@@ -157,10 +158,11 @@ namespace NiuMa
 		// 后续由上一局赢家先出
 		// 如果配置了must_include_spade3，则持有黑桃3的玩家先出
 		if (_rule->getMustIncludeSpade3()) {
-			for (auto& kv : _avatars) {
-				auto avatar = getAvatar(kv.first);
-				if (avatar && hasSpade3(kv.first))
-					return kv.first;
+   for (int _si = 0; _si < 2; _si++) {
+   	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+   	if (!avatar) continue;
+				if (avatar && hasSpade3(_si))
+					return _si;
 			}
 		}
 		// 默认从座位0开始
@@ -196,25 +198,30 @@ namespace NiuMa
 		_bombCount = 0;
 		_hasFirstPlayed = false;
 		_playback = PaoDeKuaiPlaybackData();
-		_playback.venueId = _venueId;
+		_playback.venueId = getId();
 		_playback.roundNo = _roundNo;
 		_playback.banker = _banker;
 		_playback.playerCount = _rule->getPlayerCount();
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			_playback.playerIds[idx] = kv.second->getPlayerId();
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
+			_playback.playerIds[idx] = avatar->getPlayerId();
 			idx++;
 		}
 
 		// 风控采集：开始新局
-		_riskCollector.startRound(_venueId, static_cast<int>(GameType::PaoDeKuai), _roundNo);
-		for (auto& kv : _avatars) {
-			_riskCollector.recordPlayer(kv.second->getPlayerId(), kv.first);
+		_riskCollector.startRound(getId(), static_cast<int>(GameType::PaoDeKuai), _roundNo);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
+			_riskCollector.recordPlayer(avatar->getPlayerId(), _si);
 		}
 
 		// 清理玩家状态
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar) {
 				avatar->clear();
 				avatar->setRoundScore(0);
@@ -235,15 +242,17 @@ namespace NiuMa
 		setState(GameState::Playing);
 
 		// 通知所有玩家
-		for (auto& kv : _avatars) {
-			notifyDeal(kv.second->getPlayerId());
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
+			notifyDeal(avatar->getPlayerId());
 		}
 
 		// 设置托管超时
 		_autoPlayTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) +
 			_rule->getAutoPlayTimeout() / 1000;
 
-		LOG_INFO("跑得快游戏开始，场地: " << _venueId << "，局号: " << _roundNo);
+		{ std::ostringstream oss; oss << "跑得快游戏开始，场地: " << getId() << "，局号: " << _roundNo; LOG_INFO(oss.str()); }
 	}
 
 	void PaoDeKuaiRoom::dealCards() {
@@ -257,8 +266,9 @@ namespace NiuMa
 
 		// 将牌分配给各玩家
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar && idx < static_cast<int>(heaps.size())) {
 				// 取前cardCount张
 				CardArray hand;
@@ -406,10 +416,11 @@ namespace NiuMa
 	void PaoDeKuaiRoom::settle() {
 		// 找出赢家
 		int winnerSeat = -1;
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar && avatar->isFinished()) {
-				winnerSeat = kv.first;
+				winnerSeat = _si;
 				break;
 			}
 		}
@@ -425,26 +436,28 @@ namespace NiuMa
 		saveRoundRecord();
 
 		// 发送积分变动MQ事件
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (!avatar)
 				continue;
 			int64_t winGold = avatar->getWinGold();
 			if (winGold > 0) {
 				WalletEventTask::publish(
 					avatar->getPlayerId(), "GAME_WIN", winGold,
-					"PaoDeKuai", _venueId, "跑得快赢得金币");
+					"PaoDeKuai", getId(), "跑得快赢得金币");
 			}
 			else if (winGold < 0) {
 				WalletEventTask::publish(
 					avatar->getPlayerId(), "GAME_LOSE", -winGold,
-					"PaoDeKuai", _venueId, "跑得快输掉金币");
+					"PaoDeKuai", getId(), "跑得快输掉金币");
 			}
 		}
 
 		// 重置准备状态
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar)
 				avatar->setReady(false);
 		}
@@ -471,11 +484,12 @@ namespace NiuMa
 		if (loserScore > maxScore)
 			loserScore = maxScore;
 
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (!avatar)
 				continue;
-			if (kv.first == winnerSeat) {
+			if (_si == winnerSeat) {
 				avatar->setRoundScore(loserScore);
 				avatar->setWinGold(static_cast<int64_t>(loserScore) * _level);
 				avatar->setTotalScore(avatar->getTotalScore() + loserScore);
@@ -490,8 +504,9 @@ namespace NiuMa
 		// 记录到回放
 		_playback.scores[winnerSeat] = loserScore;
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar) {
 				_playback.scores[idx] = avatar->getRoundScore();
 				_playback.winGolds[idx] = avatar->getWinGold();
@@ -502,17 +517,18 @@ namespace NiuMa
 
 	void PaoDeKuaiRoom::saveRoundRecord() {
 		auto task = std::make_shared<PaoDeKuaiRecordTask>();
-		task->_venueId = _venueId;
+		task->_venueId = getId();
 		task->_roundNo = _roundNo;
 		task->_banker = _banker;
 
 		// 生成随机种子hash
-		_playback.randomSeedHash = ReplayUtils::generateSeedHash(_venueId, _roundNo, _banker);
+		_playback.randomSeedHash = ReplayUtils::generateSeedHash(getId(), _roundNo, _banker);
 		task->_randomSeedHash = _playback.randomSeedHash;
 
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar) {
 				task->_playerIds[idx] = avatar->getPlayerId();
 				task->_scores[idx] = avatar->getRoundScore();
@@ -523,15 +539,18 @@ namespace NiuMa
 
 		// 序列化回放数据
 		std::string replayData;
-		ReplayUtils::compressReplay(_playback, replayData);
+		msgpack::sbuffer sbuf;
+		msgpack::pack(sbuf, _playback);
+		ReplayUtils::compressReplay(sbuf.data(), static_cast<int>(sbuf.size()), replayData);
 		task->_playback = replayData;
 
 		MysqlPool::getSingleton().asyncQuery(task);
 
 		// 风控采集：记录得分并结束
 		_riskCollector.setRandomSeedHash(_playback.randomSeedHash);
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar)
 				_riskCollector.recordScore(avatar->getPlayerId(), avatar->getRoundScore(), avatar->getWinGold());
 		}
@@ -540,10 +559,12 @@ namespace NiuMa
 		// 随机审计日志
 		std::vector<int> cardOrder;
 		std::vector<std::string> playerIds;
-		for (auto& kv : _avatars) {
-			playerIds.push_back(kv.second->getPlayerId());
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
+			playerIds.push_back(avatar->getPlayerId());
 		}
-		RandomAuditLogger::logAudit(_venueId, static_cast<int>(GameType::PaoDeKuai),
+		RandomAuditLogger::logAudit(getId(), static_cast<int>(GameType::PaoDeKuai),
 			_roundNo, _banker, _playback.randomSeedHash, cardOrder, playerIds);
 	}
 
@@ -561,7 +582,9 @@ namespace NiuMa
 			avatar->candidateCombinations();
 			PokerCombination::Ptr comb = avatar->getFirstCandidate();
 			if (comb) {
-				doPlay(_currentPlayer, comb->cardIds);
+				std::vector<int> cardIds;
+				comb->getCards(cardIds);
+				doPlay(_currentPlayer, cardIds);
 			}
 			else {
 				// 没有可出的牌（不应该发生）
@@ -580,7 +603,9 @@ namespace NiuMa
 			if (avatar->hasCandidate()) {
 				PokerCombination::Ptr comb = avatar->getFirstCandidate();
 				if (comb) {
-					doPlay(_currentPlayer, comb->cardIds);
+					std::vector<int> cardIds;
+					comb->getCards(cardIds);
+					doPlay(_currentPlayer, cardIds);
 				}
 			}
 			else {
@@ -599,8 +624,8 @@ namespace NiuMa
 		if (!msg)
 			return;
 
-		const std::string& playerId = msg->playerId;
-		auto session = msg->getSession();
+		const std::string& playerId = msg->getPlayerId();
+		auto session = netMsg->getSession();
 		if (!session)
 			return;
 
@@ -611,10 +636,11 @@ namespace NiuMa
 		resp->playerCount = _rule->getPlayerCount();
 
 		// 查找玩家座位
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == playerId) {
-				auto avatar = getAvatar(kv.first);
-				resp->mySeat = kv.first;
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
+			if (avatar->getPlayerId() == playerId) {
+				resp->mySeat = _si;
 				resp->currentPlayer = _currentPlayer;
 				if (avatar) {
 					const CardArray& cards = avatar->getCards();
@@ -635,7 +661,7 @@ namespace NiuMa
 		}
 		resp->isFirstPlay = _isFirstPlay;
 
-		session->sendMsg(resp);
+		resp->send(session);
 	}
 
 	void PaoDeKuaiRoom::onReady(const NetMessage::Ptr& netMsg) {
@@ -646,9 +672,10 @@ namespace NiuMa
 		if (!msg)
 			return;
 
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == msg->playerId) {
-				auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
+			if (avatar->getPlayerId() == msg->getPlayerId()) {
 				if (avatar)
 					avatar->setReady(true);
 				break;
@@ -672,16 +699,18 @@ namespace NiuMa
 
 		// 查找玩家座位
 		int seat = -1;
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == msg->playerId) {
-				seat = kv.first;
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
+			if (avatar->getPlayerId() == msg->getPlayerId()) {
+				seat = _si;
 				break;
 			}
 		}
 		if (seat < 0)
 			return;
 
-		auto session = msg->getSession();
+		auto session = netMsg->getSession();
 		PlayResult result = doPlay(seat, msg->cardIds);
 		if (result != PlayResult::OK) {
 			if (session) {
@@ -706,7 +735,7 @@ namespace NiuMa
 					resp->errMsg = "出牌失败";
 					break;
 				}
-				session->sendMsg(resp);
+				resp->send(session);
 			}
 		}
 	}
@@ -718,9 +747,11 @@ namespace NiuMa
 	// 消息发送
 	void PaoDeKuaiRoom::notifyDeal(const std::string& playerId) {
 		int seat = -1;
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == playerId) {
-				seat = kv.first;
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
+			if (avatar->getPlayerId() == playerId) {
+				seat = _si;
 				break;
 			}
 		}
@@ -739,7 +770,7 @@ namespace NiuMa
 		msg->roundNo = _roundNo;
 		msg->banker = _banker;
 
-		sendToPlayer(playerId, msg);
+		sendMessage(*msg, playerId);
 	}
 
 	void PaoDeKuaiRoom::notifyPlay(int seat, const std::vector<int>& cardIds, int genre, int nextPlayer) {
@@ -748,7 +779,7 @@ namespace NiuMa
 		msg->cardIds = cardIds;
 		msg->genre = genre;
 		msg->nextPlayer = nextPlayer;
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 	}
 
 	void PaoDeKuaiRoom::notifySettlement(int winnerSeat) {
@@ -756,8 +787,9 @@ namespace NiuMa
 		msg->winnerSeat = winnerSeat;
 
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			auto avatar = getAvatar(kv.first);
+  for (int _si = 0; _si < 2; _si++) {
+  	auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+  	if (!avatar) continue;
 			if (avatar) {
 				msg->scores[idx] = avatar->getRoundScore();
 				msg->winGolds[idx] = avatar->getWinGold();
@@ -769,7 +801,7 @@ namespace NiuMa
 			idx++;
 		}
 
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 	}
 
 	void PaoDeKuaiRoom::notifyGameState(const std::string& playerId) {

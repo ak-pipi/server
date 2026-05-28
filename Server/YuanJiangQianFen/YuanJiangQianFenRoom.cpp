@@ -1,11 +1,11 @@
-﻿// YuanJiangQianFenRoom.cpp
+// YuanJiangQianFenRoom.cpp
 
 #include "YuanJiangQianFenRoom.h"
-#include "PokerAvatar.h"
 #include "YuanJiangQianFenMessages.h"
 #include "Game/ReplayUtils.h"
 #include "Game/WalletEventTask.h"
 #include "Game/RiskControlCollector.h"
+#include "YuanJiangQianFenRecordTask.h"
 #include "Game/RandomAuditLogger.h"
 #include "GameDefines.h"
 #include "Network/MsgSession.h"
@@ -14,6 +14,8 @@
 
 #include <json/json.h>
 #include <algorithm>
+#include <sstream>
+#include <msgpack.hpp>
 
 namespace NiuMa
 {
@@ -23,12 +25,12 @@ namespace NiuMa
 		, _roundNo(0), _bankerSeat(0), _currentPlayer(0)
 		, _callScoreCurrent(0), _highestCallScore(0), _highestCallSeat(-1), _callScoreCount(0)
 		, _lastPlaySeat(-1), _isFirstPlay(true), _roundCount(0)
-		, _rule(std::make_shared<PokerRule>())
+		, _rule(std::make_shared<PaoDeKuaiRule>())
+		, _dealer(_rule)
 		, _playerCount(4), _targetScore(1000), _callScoreEnabled(true), _bankerRule(0)
 		, _deckCount(2), _bombEnabled(false), _roundLimit(0), _maxScore(500)
 	{
 		_rule->initialise();
-		_dealer = PokerDealer(_rule);
 		for (int i = 0; i < 4; i++) { _totalScores[i] = 0; _roundScores[i] = 0; }
 		parseRuleConfig(ruleConfig);
 	}
@@ -63,21 +65,21 @@ namespace NiuMa
 	}
 
 	GameAvatar::Ptr YuanJiangQianFenRoom::createAvatar(const std::string& playerId, int seat, bool robot) const {
-		return std::make_shared<PokerAvatar>(_rule, playerId, seat, robot);
+		return std::make_shared<PaoDeKuaiAvatar>(_rule, playerId, seat, robot);
 	}
 
 	bool YuanJiangQianFenRoom::checkEnter(const std::string& playerId, std::string& errMsg, bool robot) const {
-		if (_avatars.size() >= 4) { errMsg = "房间已满"; return false; }
+		if (getAvatarCount() >= 4) { errMsg = "房间已满"; return false; }
 		return true;
 	}
 
-	int YuanJiangQianFenRoom::checkLeave(const std::string& playerId, std::string& errMsg) {
+	int YuanJiangQianFenRoom::checkLeave(const std::string& playerId, std::string& errMsg) const {
 		if (_gameState == GameState::Playing || _gameState == GameState::CallScore) { errMsg = "游戏进行中"; return 2; }
 		return 0;
 	}
 
 	void YuanJiangQianFenRoom::onAvatarLeaved(int seat, const std::string& playerId) {
-		if (_avatars.empty()) _gameState = GameState::None;
+		if (getAvatarCount() == 0) _gameState = GameState::None;
 	}
 
 	void YuanJiangQianFenRoom::clean() {
@@ -91,9 +93,9 @@ namespace NiuMa
 	void YuanJiangQianFenRoom::setState(GameState s) { _gameState = s; }
 
 	bool YuanJiangQianFenRoom::allReady() const {
-		if (_avatars.size() < 4) return false;
-		for (auto& kv : _avatars) {
-			auto a = std::dynamic_pointer_cast<PokerAvatar>(kv.second);
+		if (getAvatarCount() < 4) return false;
+		for (int _si = 0; _si < 4; _si++) {
+			auto a = std::dynamic_pointer_cast<PokerAvatar>(GameRoom::getAvatar(_si));
 			if (a && !a->isPlayed() && _gameState == GameState::None) return false;
 		}
 		return true;
@@ -116,15 +118,16 @@ namespace NiuMa
 		for (int i = 0; i < 4; i++) _roundScores[i] = 0;
 
 		_playbackData = QianFenPlaybackData();
-		_playbackData.venueId = _venueId;
+		_playbackData.venueId = getId();
 		_playbackData.roundNo = _roundNo;
 		_playbackData.banker = _bankerSeat;
 		_playbackData.playerCount = _playerCount;
 
 		// 风控采集：开始新局
-		_riskCollector.startRound(_venueId, static_cast<int>(GameType::YuanJiangQianFen), _roundNo);
-		for (auto& kv : _avatars) {
-			_riskCollector.recordPlayer(kv.second->getPlayerId(), kv.first);
+		_riskCollector.startRound(getId(), static_cast<int>(GameType::YuanJiangQianFen), _roundNo);
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av) _riskCollector.recordPlayer(_av->getPlayerId(), _si);
 		}
 
 		_dealer.shuffle();
@@ -135,7 +138,7 @@ namespace NiuMa
 		else
 			beginPlay();
 
-		LOG_INFO("沅江千分游戏开始，场地: " << _venueId << "，局号: " << _roundNo);
+		{ std::ostringstream _oss; _oss << "沅江千分游戏开始，场地: " << getId() << "，局号: " << _roundNo; LOG_INFO(_oss.str().c_str()); }
 	}
 
 	void YuanJiangQianFenRoom::dealCards() {
@@ -144,19 +147,22 @@ namespace NiuMa
 		_dealer.handOutCards(heaps, 4);
 
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			auto a = std::dynamic_pointer_cast<PokerAvatar>(kv.second);
+		for (int _si = 0; _si < 4; _si++) {
+			auto a = std::dynamic_pointer_cast<PokerAvatar>(GameRoom::getAvatar(_si));
 			if (a && idx < static_cast<int>(heaps.size())) {
 				a->setCards(heaps[idx]);
 				a->sortCards();
 				std::vector<int> ids;
 				for (auto& c : heaps[idx]) ids.push_back(c.getId());
-				_playbackData.playerIds[idx] = kv.second->getPlayerId();
+				_playbackData.playerIds[idx] = a->getPlayerId();
 				_playbackData.initCards[idx] = ids;
 			}
 			idx++;
 		}
-		for (auto& kv : _avatars) notifyDeal(kv.second->getPlayerId());
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av) notifyDeal(_av->getPlayerId());
+		}
 	}
 
 	void YuanJiangQianFenRoom::beginCallScore() {
@@ -193,7 +199,7 @@ namespace NiuMa
 
 	void YuanJiangQianFenRoom::doPlay(int seat, const std::vector<int>& cardIds) {
 		if (seat != _currentPlayer || cardIds.empty()) return;
-		auto a = std::dynamic_pointer_cast<PokerAvatar>(_avatars[seat]);
+		auto a = std::dynamic_pointer_cast<PokerAvatar>(GameRoom::getAvatar(seat));
 		if (!a) return;
 
 		CardArray cards;
@@ -233,19 +239,19 @@ namespace NiuMa
 
 	void YuanJiangQianFenRoom::settleRound() {
 		// 计算每人本轮得分
-		for (auto& kv : _avatars) {
-			auto a = std::dynamic_pointer_cast<PokerAvatar>(kv.second);
+		for (int _si = 0; _si < 4; _si++) {
+			auto a = std::dynamic_pointer_cast<PokerAvatar>(GameRoom::getAvatar(_si));
 			if (!a) continue;
 			int score = calcScoreCards(a->getCards());
-			_roundScores[kv.first] = -score; // 剩余牌的分数为负
-			_totalScores[kv.first] += _roundScores[kv.first];
+			_roundScores[_si] = -score; // 剩余牌的分数为负
+			_totalScores[_si] += _roundScores[_si];
 		}
 
 		// 赢家（出完牌的人）
 		int winnerSeat = -1;
-		for (auto& kv : _avatars) {
-			auto a = std::dynamic_pointer_cast<PokerAvatar>(kv.second);
-			if (a && a->getCardNums() == 0) { winnerSeat = kv.first; break; }
+		for (int _si = 0; _si < 4; _si++) {
+			auto a = std::dynamic_pointer_cast<PokerAvatar>(GameRoom::getAvatar(_si));
+			if (a && a->getCardNums() == 0) { winnerSeat = _si; break; }
 		}
 		if (winnerSeat >= 0) {
 			int winnerScore = 0;
@@ -280,38 +286,44 @@ namespace NiuMa
 
 	void YuanJiangQianFenRoom::saveRoundRecord() {
 		auto task = std::make_shared<YuanJiangQianFenRecordTask>();
-		task->_venueId = _venueId; task->_roundNo = _roundNo; task->_banker = _bankerSeat;
-		_playbackData.randomSeedHash = ReplayUtils::generateSeedHash(_venueId, _roundNo, _bankerSeat);
+		task->_venueId = getId(); task->_roundNo = _roundNo; task->_banker = _bankerSeat;
+		_playbackData.randomSeedHash = ReplayUtils::generateSeedHash(getId(), _roundNo, _bankerSeat);
 		task->_randomSeedHash = _playbackData.randomSeedHash;
 		int idx = 0;
-		for (auto& kv : _avatars) {
-			if (idx < 4) {
-				task->_playerIds[idx] = kv.second->getPlayerId();
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (idx < 4 && _av) {
+				task->_playerIds[idx] = _av->getPlayerId();
 				task->_scores[idx] = _roundScores[idx];
 				task->_winGolds[idx] = _roundScores[idx] * _level;
 			}
 			idx++;
 		}
 		std::string rd;
-		ReplayUtils::compressReplay(_playbackData, rd);
+		msgpack::sbuffer _sbuf;
+		msgpack::pack(_sbuf, _playbackData);
+		ReplayUtils::compressReplay(_sbuf.data(), static_cast<int>(_sbuf.size()), rd);
 		task->_playback = rd;
 		MysqlPool::getSingleton().asyncQuery(task);
 
 		// 风控采集：记录得分并结束
 		_riskCollector.setRandomSeedHash(_playbackData.randomSeedHash);
-		for (auto& kv : _avatars) {
-			_riskCollector.recordScore(kv.second->getPlayerId(), _roundScores[kv.first],
-				static_cast<int64_t>(_roundScores[kv.first]) * _level);
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av)
+				_riskCollector.recordScore(_av->getPlayerId(), _roundScores[_si],
+					static_cast<int64_t>(_roundScores[_si]) * _level);
 		}
 		_riskCollector.finishRound();
 
 		// 随机审计日志
 		std::vector<int> cardOrder;
 		std::vector<std::string> playerIds;
-		for (auto& kv : _avatars) {
-			playerIds.push_back(kv.second->getPlayerId());
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av) playerIds.push_back(_av->getPlayerId());
 		}
-		RandomAuditLogger::logAudit(_venueId, static_cast<int>(GameType::YuanJiangQianFen),
+		RandomAuditLogger::logAudit(getId(), static_cast<int>(GameType::YuanJiangQianFen),
 			_roundNo, _bankerSeat, _playbackData.randomSeedHash, cardOrder, playerIds);
 	}
 
@@ -327,21 +339,23 @@ namespace NiuMa
 	void YuanJiangQianFenRoom::onSyncTable(const NetMessage::Ptr& netMsg) {
 		auto msg = std::dynamic_pointer_cast<MsgQianFenSync>(netMsg);
 		if (!msg) return;
-		auto session = msg->getSession();
+		auto session = netMsg->getSession();
 		if (!session) return;
 		auto resp = std::make_shared<MsgQianFenSyncResp>();
 		resp->gameState = static_cast<int>(_gameState);
 		resp->roundNo = _roundNo; resp->banker = _bankerSeat; resp->bankerSeat = _bankerSeat;
 		resp->playerCount = _playerCount; resp->currentPlayer = _currentPlayer;
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == msg->playerId) {
-				resp->mySeat = kv.first;
-				auto a = std::dynamic_pointer_cast<PokerAvatar>(kv.second);
+		const std::string& playerId = msg->getPlayerId();
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av && _av->getPlayerId() == playerId) {
+				resp->mySeat = _si;
+				auto a = std::dynamic_pointer_cast<PokerAvatar>(_av);
 				if (a) { const CardArray& cards = a->getCards(); for (auto& c : cards) resp->myCards.push_back(c.getId()); }
 				break;
 			}
 		}
-		session->sendMsg(resp);
+		resp->send(session);
 	}
 
 	void YuanJiangQianFenRoom::onReady(const NetMessage::Ptr& netMsg) {
@@ -349,7 +363,7 @@ namespace NiuMa
 		auto msg = std::dynamic_pointer_cast<MsgQianFenReady>(netMsg);
 		if (!msg) return;
 		// 简化：收到第4个准备就开始
-		bool allHere = (_avatars.size() >= 4);
+		bool allHere = (getAvatarCount() >= 4);
 		if (allHere) { setState(GameState::Ready); startRound(); }
 	}
 
@@ -357,8 +371,10 @@ namespace NiuMa
 		if (_gameState != GameState::CallScore) return;
 		auto msg = std::dynamic_pointer_cast<MsgQianFenCallScore>(netMsg);
 		if (!msg) return;
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == msg->playerId) { processCallScore(kv.first, msg->score); break; }
+		const std::string& playerId = msg->getPlayerId();
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av && _av->getPlayerId() == playerId) { processCallScore(_si, msg->score); break; }
 		}
 	}
 
@@ -366,56 +382,67 @@ namespace NiuMa
 		if (_gameState != GameState::Playing) return;
 		auto msg = std::dynamic_pointer_cast<MsgQianFenPlay>(netMsg);
 		if (!msg) return;
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == msg->playerId) { doPlay(kv.first, msg->cardIds); break; }
+		const std::string& playerId = msg->getPlayerId();
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av && _av->getPlayerId() == playerId) { doPlay(_si, msg->cardIds); break; }
 		}
 	}
 
 	void YuanJiangQianFenRoom::notifyDeal(const std::string& playerId) {
-		for (auto& kv : _avatars) {
-			if (kv.second->getPlayerId() == playerId) {
-				auto a = std::dynamic_pointer_cast<PokerAvatar>(kv.second);
-				if (!a) return;
-				auto msg = std::make_shared<MsgQianFenDeal>();
-				const CardArray& cards = a->getCards();
-				for (auto& c : cards) msg->cards.push_back(c.getId());
-				msg->roundNo = _roundNo; msg->banker = _bankerSeat;
-				sendToPlayer(playerId, msg);
-				return;
-			}
+		auto _av = GameRoom::getAvatar(playerId);
+		if (!_av) return;
+		int seat = -1;
+		for (int _si = 0; _si < 4; _si++) {
+			auto tmp = GameRoom::getAvatar(_si);
+			if (tmp && tmp->getPlayerId() == playerId) { seat = _si; break; }
 		}
+		if (seat < 0) return;
+		auto a = std::dynamic_pointer_cast<PokerAvatar>(_av);
+		if (!a) return;
+		auto msg = std::make_shared<MsgQianFenDeal>();
+		const CardArray& cards = a->getCards();
+		for (auto& c : cards) msg->cards.push_back(c.getId());
+		msg->roundNo = _roundNo; msg->banker = _bankerSeat;
+		sendMessage(*msg, playerId);
 	}
 
 	void YuanJiangQianFenRoom::notifyCallScore(int seat, int score, int nextSeat) {
 		auto msg = std::make_shared<MsgQianFenCallScoreNotify>();
 		msg->seat = seat; msg->score = score; msg->nextSeat = nextSeat; msg->bankerSeat = _bankerSeat;
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 	}
 
 	void YuanJiangQianFenRoom::notifyPlay(int seat, const std::vector<int>& cardIds) {
 		auto msg = std::make_shared<MsgQianFenPlayNotify>();
 		msg->seat = seat; msg->cardIds = cardIds; msg->nextPlayer = _currentPlayer;
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 	}
 
 	void YuanJiangQianFenRoom::notifyRoundResult() {
 		auto msg = std::make_shared<MsgQianFenRoundResult>();
 		for (int i = 0; i < 4; i++) { msg->scores[i] = _roundScores[i]; msg->winGolds[i] = _roundScores[i] * _level; }
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 	}
 
 	void YuanJiangQianFenRoom::notifyFinalResult() {
 		auto msg = std::make_shared<MsgQianFenFinalResult>();
-		for (auto& kv : _avatars) {
-			int s = kv.first;
-			if (s < 4) { msg->totalScores[s] = _totalScores[s]; msg->totalGolds[s] = _totalScores[s] * _level; msg->playerIds[s] = kv.second->getPlayerId(); }
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (_av) {
+				msg->totalScores[_si] = _totalScores[_si];
+				msg->totalGolds[_si] = _totalScores[_si] * _level;
+				msg->playerIds[_si] = _av->getPlayerId();
+			}
 		}
-		sendToAll(msg);
+		sendMessageToAll(*msg);
 		// MQ
-		for (auto& kv : _avatars) {
-			int64_t g = _totalScores[kv.first] * _level;
-			if (g > 0) WalletEventTask::publish(kv.second->getPlayerId(), "GAME_WIN", g, "YuanJiangQianFen", _venueId, "沅江千分赢得金币");
-			else if (g < 0) WalletEventTask::publish(kv.second->getPlayerId(), "GAME_LOSE", -g, "YuanJiangQianFen", _venueId, "沅江千分输掉金币");
+		for (int _si = 0; _si < 4; _si++) {
+			auto _av = GameRoom::getAvatar(_si);
+			if (!_av) continue;
+			int64_t g = _totalScores[_si] * _level;
+			if (g > 0) WalletEventTask::publish(_av->getPlayerId(), "GAME_WIN", g, "YuanJiangQianFen", getId(), "沅江千分赢得金币");
+			else if (g < 0) WalletEventTask::publish(_av->getPlayerId(), "GAME_LOSE", -g, "YuanJiangQianFen", getId(), "沅江千分输掉金币");
 		}
 	}
 }

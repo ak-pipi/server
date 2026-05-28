@@ -1,7 +1,8 @@
 ﻿// PaoDeKuaiMessages.cpp
 
 #include "PaoDeKuaiMessages.h"
-#include "Message/MessageCreator.h"
+#include "Message/MessageManager.h"
+#include "Message/MsgCreator.h"
 
 namespace NiuMa
 {
@@ -48,14 +49,11 @@ namespace NiuMa
 	}
 
 	void PaoDeKuaiMessages::registMessages() {
-		MessageCreator::getSingleton().registCreator(
-			MsgPaoDeKuaiSync::TYPE,
-			[]() -> Message::Ptr { return std::make_shared<MsgPaoDeKuaiSync>(); });
-		MessageCreator::getSingleton().registCreator(
-			MsgPaoDeKuaiReady::TYPE,
-			[]() -> Message::Ptr { return std::make_shared<MsgPaoDeKuaiReady>(); });
-		MessageCreator::getSingleton().registCreator(
-			MsgPaoDeKuaiPlay::TYPE,
-			[]() -> Message::Ptr { return std::make_shared<MsgPaoDeKuaiPlay>(); });
+		IMsgCreator::Ptr creator1 = IMsgCreator::Ptr(new MsgCreator<MsgPaoDeKuaiSync>());
+		MessageManager::getSingleton().registCreator(MsgPaoDeKuaiSync::TYPE, creator1);
+		IMsgCreator::Ptr creator2 = IMsgCreator::Ptr(new MsgCreator<MsgPaoDeKuaiReady>());
+		MessageManager::getSingleton().registCreator(MsgPaoDeKuaiReady::TYPE, creator2);
+		IMsgCreator::Ptr creator3 = IMsgCreator::Ptr(new MsgCreator<MsgPaoDeKuaiPlay>());
+		MessageManager::getSingleton().registCreator(MsgPaoDeKuaiPlay::TYPE, creator3);
 	}
 }

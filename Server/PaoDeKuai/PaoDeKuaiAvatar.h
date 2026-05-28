@@ -16,9 +16,6 @@ namespace NiuMa
 		virtual ~PaoDeKuaiAvatar();
 
 	public:
-		// 获取座位号
-		int getSeat() const { return _seat; }
-
 		// 设置/获取当局得分
 		void setRoundScore(int score) { _roundScore = score; }
 		int getRoundScore() const { return _roundScore; }

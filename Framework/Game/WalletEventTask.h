@@ -44,8 +44,8 @@ namespace NiuMa
 			const std::string& bizType,
 			const std::string& bizId,
 			const std::string& remark,
-			const std::string& exchange,
-			const std::string& routingKey);
+			const std::string& exchange = "game.direct",
+			const std::string& routingKey = "web_server_001");
 
 		/**
 		 * 发布房费扣除事件

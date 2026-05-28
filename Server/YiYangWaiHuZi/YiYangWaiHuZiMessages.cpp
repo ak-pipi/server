@@ -1,7 +1,8 @@
 ﻿// YiYangWaiHuZiMessages.cpp
 
 #include "YiYangWaiHuZiMessages.h"
-#include "Message/MessageCreator.h"
+#include "Message/MessageManager.h"
+#include "Message/MsgCreator.h"
 
 namespace NiuMa
 {
@@ -33,13 +34,13 @@ namespace NiuMa
 	}
 
 	void YiYangWaiHuZiMessages::registMessages() {
-		MessageCreator::getSingleton().registCreator(MsgWaiHuZiSync::TYPE,
-			[]() -> Message::Ptr { return std::make_shared<MsgWaiHuZiSync>(); });
-		MessageCreator::getSingleton().registCreator(MsgWaiHuZiReady::TYPE,
-			[]() -> Message::Ptr { return std::make_shared<MsgWaiHuZiReady>(); });
-		MessageCreator::getSingleton().registCreator(MsgWaiHuZiDiscard::TYPE,
-			[]() -> Message::Ptr { return std::make_shared<MsgWaiHuZiDiscard>(); });
-		MessageCreator::getSingleton().registCreator(MsgWaiHuZiAction::TYPE,
-			[]() -> Message::Ptr { return std::make_shared<MsgWaiHuZiAction>(); });
+		IMsgCreator::Ptr creator1 = IMsgCreator::Ptr(new MsgCreator<MsgWaiHuZiSync>());
+		MessageManager::getSingleton().registCreator(MsgWaiHuZiSync::TYPE, creator1);
+		IMsgCreator::Ptr creator2 = IMsgCreator::Ptr(new MsgCreator<MsgWaiHuZiReady>());
+		MessageManager::getSingleton().registCreator(MsgWaiHuZiReady::TYPE, creator2);
+		IMsgCreator::Ptr creator3 = IMsgCreator::Ptr(new MsgCreator<MsgWaiHuZiDiscard>());
+		MessageManager::getSingleton().registCreator(MsgWaiHuZiDiscard::TYPE, creator3);
+		IMsgCreator::Ptr creator4 = IMsgCreator::Ptr(new MsgCreator<MsgWaiHuZiAction>());
+		MessageManager::getSingleton().registCreator(MsgWaiHuZiAction::TYPE, creator4);
 	}
 }

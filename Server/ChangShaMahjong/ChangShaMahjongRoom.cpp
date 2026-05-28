@@ -694,7 +694,7 @@ namespace NiuMa
 			auto avatar = std::dynamic_pointer_cast<ChangShaMahjongAvatar>(getAvatar(i));
 			if (avatar && idx < 4) {
 				task->_playerIds[idx] = avatar->getPlayerId();
-				task->_scores[idx] = avatar->getRoundScore();
+				task->_scores[idx] = avatar->getScore();
 				task->_winGolds[idx] = avatar->getWinGold();
 			}
 			idx++;
@@ -702,7 +702,9 @@ namespace NiuMa
 
 		// 序列化回放数据
 		std::string replayData;
-		ReplayUtils::compressReplay(_playbackData, replayData);
+		msgpack::sbuffer sbuf;
+		msgpack::pack(sbuf, _playbackData);
+		ReplayUtils::compressReplay(sbuf.data(), static_cast<int>(sbuf.size()), replayData);
 		task->_playback = replayData;
 
 		MysqlPool::getSingleton().asyncQuery(task);
@@ -712,7 +714,7 @@ namespace NiuMa
 		for (int i = 0; i < 4; i++) {
 			auto avatar = std::dynamic_pointer_cast<ChangShaMahjongAvatar>(getAvatar(i));
 			if (avatar)
-				_riskCollector.recordScore(avatar->getPlayerId(), avatar->getRoundScore(), static_cast<int64_t>(avatar->getWinGold()));
+				_riskCollector.recordScore(avatar->getPlayerId(), avatar->getScore(), static_cast<int64_t>(avatar->getWinGold()));
 		}
 		_riskCollector.finishRound();
 
