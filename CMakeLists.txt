@@ -81,9 +81,6 @@ update_cached(MAHJONG_LIBRARY "")
 # Poker library
 update_cached(POKER_LIBRARY "")
 
-# add 3rdpart to this project
-add_subdirectory(3rdpart)
-
 set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost REQUIRED COMPONENTS log log_setup filesystem system)
 if(Boost_FOUND)
@@ -100,6 +97,9 @@ if(OpenSSL_FOUND)
   message("${OPENSSL_INCLUDE_DIR}")
   message("${OPENSSL_LIBRARIES}")
 endif()
+
+# add 3rdpart to this project
+add_subdirectory(3rdpart)
 #include_directories(${OPENSSL_INCLUDE_DIR})
 
 # 查找 mysql 是否安装

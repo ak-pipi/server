@@ -16,4 +16,7 @@ if(WIN32)
   target_link_directories(Server PRIVATE "${BOOST_ROOT}/lib")
 else()
   target_link_directories(Server PRIVATE "${Boost_INCLUDE_DIRS}/../lib")
+  # mysql-connector-c++ JDBC 依赖的库搜索路径
+  target_link_directories(Server PRIVATE "/opt/homebrew/opt/mysql-client/lib")
+  target_link_directories(Server PRIVATE "/opt/homebrew/opt/openssl@3/lib")
 endif()
