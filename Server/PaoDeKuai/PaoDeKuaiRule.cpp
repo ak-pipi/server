@@ -18,6 +18,7 @@ namespace NiuMa
 		, _maxRoundScore(100)
 		, _mustIncludeSpade3(true)
 	{
+		_orderTable = new CardOrderTable();
 	}
 
 	PaoDeKuaiRule::~PaoDeKuaiRule() {}
