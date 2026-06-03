@@ -112,9 +112,83 @@ VenueLoader（抽象） -- 每种游戏类型的工厂类
 
 新增游戏支持通过 `ruleConfig` JSON 动态加载玩法规则。规则配置在 Room 构造函数中从 JSON 解析并缓存，随房间生命周期保持快照。配置项包括：底注、封顶分数、房费类型、局数、操作开关（吃/碰/杠/自摸/点炮）、庄家规则等。
 
+### MQ 通信协议约定
+
+所有 MQ 消息遵循统一的信封格式：
+
+```
+1. 构建内层 JSON 对象（具体业务字段）
+2. 将 JSON 字符串进行 Base64 编码，得到 msgPack
+3. 构建外层信封: { "msgType": "消息类型", "msgPack": "Base64字符串" }
+4. 将外层信封序列化为 JSON 字符串，发送到 RabbitMQ
+```
+
+C++ 端使用 `RabbitmqClient::publishJson(exchange, routingKey, msgType, innerJson)` 发送，该函数内部自动完成 Base64 编码和信封封装。
+
+**Exchange 与 Routing Key 规范**：
+
+| 方向 | Exchange | Routing Key | 说明 |
+|------|----------|-------------|------|
+| web_server -> C++ 定向 | `game.direct` | `game_server_001` | 发给特定C++服务器 |
+| web_server -> C++ 广播 | `game.direct` | `web_server_001` | 广播给所有C++服务器 |
+| C++ -> web_server | `game.direct` | `web_server_001` | C++回传给web_server |
+| C++ -> C++ 广播 | `game.fanout` | `""`（空） | 跨C++服务器广播 |
+
+### MQ Handler 注册模式
+
+所有 MQ 消息处理器遵循统一的继承模式：
+
+```
+RabbitmqMessageHandler (基类)
+    └── RabbitmqMessageJsonHandler (JSON解析中间层)
+          └── 具体Handler类 (如 LeaveVenueHandler)
+```
+
+新增 Handler 标准模板（在 `XxxManager::init()` 中定义和注册）：
+
+```cpp
+class MyNewHandler : public RabbitmqMessageJsonHandler {
+public:
+    MyNewHandler(const std::string& tag) : RabbitmqMessageJsonHandler(tag) {}
+    virtual ~MyNewHandler() {}
+protected:
+    virtual bool receive(const std::string& message) override {
+        return (message.find("MyNewMessageType") != std::string::npos);
+    }
+    virtual void handleImpl(const std::string& msgType, const std::string& json) override {
+        // 解析 JSON 并处理业务逻辑
+    }
+};
+RabbitmqMessageHandler::Ptr handler(new MyNewHandler(consumerTag));
+RabbitmqConsumer::getSingleton().addHandler(handler);
+```
+
+已有 Handler 注册位置：
+
+| Handler | 注册位置 | ConsumerTag |
+|---------|---------|-------------|
+| `LeaveVenueHandler` | `VenueManager::init()` | `directConsumerTag` |
+| `VersionUpdateHandler` | `VersionManager::init()` | `directConsumerTag` |
+| `BlacklistHandler` | `SecurityManager::init()` | `fanoutConsumerTag` |
+
 ### 积分钱包 MQ 对接
 
 `Framework/Game/WalletEventTask` 提供通过 RabbitMQ 向 web_server 发送积分变动事件的工具。事件类型：`GAME_WIN`（赢牌）、`GAME_LOSE`（输牌）、`ROOM_FEE`（房费）。事件包含 user_id、wallet_type、change_amount、biz_type、biz_id、remark。使用 `RabbitmqClient::getSingleton().publishJson()` 发布。
+
+**MQ 信封**：`msgType: "WalletChangeEvent"`，Exchange: `game.direct`，Routing Key: `web_server_001`。
+
+**已集成游戏**：跑得快、长沙麻将、益阳歪胡子、沅江千分。
+
+**注意**：`WalletEventTask::publishRoomFee()` 方法已定义但尚无任何调用点（需在各游戏 Room 中集成房费扣费逻辑时调用）。
+
+**待集成游戏**：标准麻将(1021)、百人牛牛(1023)、六安比鸡(1027)、逮狗腿(1028)、掼蛋(1030)、桃江麻将(1031)、红中麻将(1032)。
+
+调用示例：
+```cpp
+WalletEventTask::publish(playerId, "GAME_WIN", winAmount, "game_guan_dan", venueId, "掼蛋赢牌得分");
+WalletEventTask::publish(playerId, "GAME_LOSE", loseAmount, "game_guan_dan", venueId, "掼蛋输牌扣分");
+WalletEventTask::publishRoomFee(playerId, feeAmount, venueId, exchange, routingKey);
+```
 
 ### 回放系统增强
 
@@ -128,18 +202,50 @@ VenueLoader（抽象） -- 每种游戏类型的工厂类
 
 - `Framework/Game/RiskControlCollector` 每局采集：同桌玩家组合、IP 记录、设备 ID、操作耗时
 - 异常检测辅助数据：频繁同桌、固定输赢关系、同 IP 多号、异常逃跑
-- 通过 MQ 将风控数据以 JSON 格式推送给 web_server（`RiskControlData` 事件类型）
+- **MQ 信封**：`msgType: "RiskControlData"`，Exchange: `game.direct`，Routing Key: `web_server_001`
 - **已集成到所有新增游戏**：PaoDeKuai、ChangShaMahjong、YiYangWaiHuZi、YuanJiangQianFen
+- **待集成游戏**：标准麻将(1021)、百人牛牛(1023)、六安比鸡(1027)、逮狗腿(1028)、掼蛋(1030)、桃江麻将(1031)、红中麻将(1032)
 - 集成模式：每个 Room 持有 `_riskCollector` 成员，在 `startRound()` 中调用 `startRound()` + `recordPlayer()`，在 `saveRoundRecord()` 中调用 `setRandomSeedHash()` + `recordScore()` + `finishRound()`
+
+### IP 黑名单跨服务器同步
+
+`SecurityManager` 已实现 IP 黑名单检测与跨 C++ 服务器广播同步：
+- `abnormalBehavior()` 检测异常（3秒内超过19次异常请求）并广播 `MsgIpBlacklistAdd`
+- `checkBlacklist()` 过期清理（有效期5分钟/300秒）并广播 `MsgIpBlacklistRemove`
+- `handleMessage()` 处理来自其他 C++ 服务器的广播
+- Exchange: `game.fanout`（广播），Routing Key: `""`（空）
+- Handler: `BlacklistHandler` 注册在 `SecurityManager::init()`，使用 `fanoutConsumerTag`
+- Java web_server 可选监听用于管理后台展示和手动管理（待 Java 端实现）
+
+### 管理后台房间操作（待实现）
+
+Java 管理后台通过 MQ 指令让 C++ 服务器创建或强制解散游戏房间。Java 端发送逻辑已实现，C++ 端需要新增两个 MQ Handler。
+
+**MsgCreateRoom**（方向: Java -> C++，Exchange: `game.direct`，Routing Key: `web_server_001`）：
+
+内层 JSON 字段：`roomId`(房间ID)、`roomNo`(房间号)、`gameId`(游戏类型ID如"1021")、`districtId`(赛区ID,可选)、`configSnapshot`(房间配置JSON快照)。
+
+**MsgForceDissolveRoom**：字段与 MsgCreateRoom 相同，Exchange/Routing Key 相同。
+
+实现步骤：
+1. 在 `VenueManager.h` 中声明 `handleCreateRoom()` / `handleForceDissolveRoom()` 方法
+2. 在 `VenueManager.cpp` 中实现处理逻辑（查找 VenueLoader 创建场地 / 查找场地并调用 forceDissolve）
+3. 在 `VenueManager::init()` 中注册 `CreateRoomHandler` / `ForceDissolveRoomHandler`（使用 `directConsumerTag`，与 `LeaveVenueHandler` 同级）
+4. 确保 `Venue` 基类有 `forceDissolve()` 方法
+
+注意事项：
+- 需检查 `venue_server_map:<roomId>` 确认房间在本机，不在本机则忽略
+- 需能从 `configSnapshot` 解析出游戏配置并恢复场地状态
 
 ### 合规随机算法审计
 
 - 发牌使用服务端安全随机数
 - `Framework/Game/RandomAuditLogger` 每局生成并记录随机种子审计日志
-- 审计日志通过 MQ 推送给 web_server（`RandomAuditLog` 事件类型）
+- **MQ 信封**：`msgType: "RandomAuditLog"`，Exchange: `game.direct`，Routing Key: `web_server_001`
 - 包含：场地ID、游戏类型、局号、庄家、种子hash、发牌顺序hash、玩家ID列表
 - `ReplayUtils::generateSeedHash()` 使用 CRC32 生成唯一种子hash
 - **已集成到所有新增游戏**：在 `saveRoundRecord()` 中调用 `RandomAuditLogger::logAudit()`
+- **待集成游戏**：标准麻将(1021)、百人牛牛(1023)、六安比鸡(1027)、逮狗腿(1028)、掼蛋(1030)、桃江麻将(1031)、红中麻将(1032)
 
 ### 跑得快（PaoDeKuai）架构
 
@@ -181,7 +287,10 @@ VenueLoader（抽象） -- 每种游戏类型的工厂类
 ### 版本管理与灰度发布
 
 - `Framework/Game/VersionManager` 单例管理游戏引擎版本
-- **MQ 接收版本更新**：web_server 通过 `MsgGameVersionUpdate` 消息下发版本配置
+- **MQ 接收版本更新**：web_server 通过 `MsgGameVersionUpdate` 消息下发版本配置（Exchange: `game.direct`，Routing Key: `web_server_001`）
+  - 内层 JSON 字段：`current_version`、`min_compatible_version`、`gray_percent`、`gray_version`、`gray_player_ids`
+  - Handler: `VersionUpdateHandler` 注册在 `VersionManager::init()`，使用 `directConsumerTag`
+  - Java 端之前发送的 msgType 是 `MsgLoadGameRule`，与 C++ 端不匹配，Java 端将修改为 `MsgGameVersionUpdate`，C++ 端无需修改
 - **客户端连接响应**：`MsgPlayerConnectResp` 返回当前版本（`engineVersion`）、最低兼容版本（`minVersion`）、玩家版本（`playerVersion`）、是否强制更新（`forceUpdate`）
 - **灰度发布**：支持按玩家ID列表和百分比分配新版本（`_grayPercent`、`_grayPlayerIds`、`_grayVersion`）
 - **Redis 持久化**：版本配置存储在 Redis `game_engine_version_config` 哈希表中，重启后自动恢复
@@ -199,6 +308,44 @@ VenueLoader（抽象） -- 每种游戏类型的工厂类
 ## 配置
 
 运行时配置文件为 `Server/server.ini`，包含以下配置段：`[Server]`（服务器 ID、端口、线程数）、`[Websocket]`、`[Mysql]`、`[Redis]`、`[RabbitMQ]`。服务器启动后在 Redis 中注册自身信息，每 3 秒更新一次保活时间。
+
+## MQ 消息类型汇总
+
+### C++ -> Java（C++ 发送，Java 接收）
+
+| msgType | Exchange | RoutingKey | C++ 发送方 | 状态 |
+|---------|----------|------------|-----------|------|
+| `CommandResult` | game.direct | 动态(from msg) | VenueManager | 正常 |
+| `WalletChangeEvent` | game.direct | web_server_001 | WalletEventTask | 断开（Java待实现） |
+| `RiskControlData` | game.direct | web_server_001 | RiskControlCollector | 断开（Java待实现） |
+| `RandomAuditLog` | game.direct | web_server_001 | RandomAuditLogger | 断开（Java待实现） |
+| `MsgIpBlacklistAdd` | game.fanout | "" | SecurityManager | 断开（Java待实现，可选） |
+| `MsgIpBlacklistRemove` | game.fanout | "" | SecurityManager | 断开（Java待实现，可选） |
+
+### Java -> C++（Java 发送，C++ 接收）
+
+| msgType | Exchange | RoutingKey | Java 发送方 | C++ 接收方 | 状态 |
+|---------|----------|------------|-----------|-----------|------|
+| `MsgLeaveVenue` | game.direct | 动态(from Redis) | GameServiceImpl | VenueManager | 正常 |
+| `MsgCreateRoom` | game.direct | web_server_001 | RoomManageServiceImpl | 待实现 | 断开 |
+| `MsgForceDissolveRoom` | game.direct | web_server_001 | RoomManageServiceImpl | 待实现 | 断开 |
+| `MsgGameVersionUpdate` | game.direct | web_server_001 | GameRuleVersionServiceImpl | VersionManager | msgType不匹配（Java待改） |
+
+### C++ -> C++（C++ 服务器间广播）
+
+| msgType | Exchange | RoutingKey | 发送方 | 接收方 | 状态 |
+|---------|----------|------------|--------|--------|------|
+| `MsgIpBlacklistAdd` | game.fanout | "" | SecurityManager | SecurityManager | 正常 |
+| `MsgIpBlacklistRemove` | game.fanout | "" | SecurityManager | SecurityManager | 正常 |
+
+## C++ 端待办优先级
+
+| 优先级 | 功能 | 工作量 | 说明 |
+|--------|------|--------|------|
+| P0 | 在更多游戏中集成 WalletChangeEvent | 小 | 金币不入账=核心功能缺失 |
+| P1 | 实现 MsgCreateRoom / MsgForceDissolveRoom 处理器 | 中 | 管理后台功能缺失 |
+| P2 | 在各游戏中集成 RiskControlCollector | 小 | 风控系统数据缺失 |
+| P2 | 在各游戏中集成 RandomAuditLogger | 小 | 合规审计缺失 |
 
 ## 第三方依赖
 
