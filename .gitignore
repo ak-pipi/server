@@ -11,4 +11,7 @@ Release/
 .idea/
 build/
 build-debug/
+bin/
 .vscode/
+logs/
+*.log
