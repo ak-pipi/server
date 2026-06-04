@@ -1,0 +1,499 @@
+[0x00000001fb7d8840] 06-04T20:53:13.835677 info TimerManager.cpp:217 TimerManager started, threadNum: 3
+[0x00000001fb7d8840] 06-04T20:53:13.836164 info TcpServer.cpp:446 Tcp server startup, port: 10086, thread num: 4
+[0x00000001fb7d8840] 06-04T20:53:13.836318 info WebsocketServer.cpp:550 Websocket server startup, port: 9098, thread num: 2
+[0x00000001fb7d8840] 06-04T20:53:13.836383 info MysqlPool.cpp:319 Mysql pool started, host: tcp://127.0.0.1:3306, username: root, schema: niuma, keep connections: 3, max connections: 20, threadNum: 2
+[0x00000001fb7d8840] 06-04T20:53:13.836445 info RedisPool.cpp:854 Redis pool started, host: 8.156.81.51, port: 6379, database: 9, keep connections: 3, max connections: 20
+[0x00000001fb7d8840] 06-04T20:53:22.863185 error RabbitmqUtils.cpp:45 Declaring queue server channel error code: 406, message: PRECONDITION_FAILED - inequivalent arg 'auto_delete' for queue 'game.fanout.queue.001' in vhost 'niuma': received 'true' but current is 'false'
+[0x00000001fb7d8840] 06-04T20:53:30.100095 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
+[0x00000001fb7d8840] 06-04T20:53:37.409933 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: current_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T20:53:38.301112 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: min_compatible_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T20:53:39.486672 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_percent) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T20:53:41.286711 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T20:53:42.851501 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_player_ids) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T20:53:42.851608 info VersionManager.cpp:78 版本管理器初始化完成，当前版本: 1.0.0，最低兼容版本: 1.0.0
+[0x00000001fb7d8840] 06-04T20:53:49.035751 info main.cpp:500 Server startup succeed.
+[0x000000016bc47000] 06-04T21:02:31.024827 error RabbitmqClient.cpp:419 Connection close.
+[0x000000016bc47000] 06-04T21:02:31.024929 error RabbitmqClient.cpp:471 Consume message error: connection closed unexpectedly
+[0x000000016bc47000] 06-04T21:02:36.233823 error RabbitmqUtils.cpp:22 Closing connection socket is closed
+[0x000000016bc47000] 06-04T21:02:44.703651 error RabbitmqUtils.cpp:45 Declaring queue server channel error code: 406, message: PRECONDITION_FAILED - inequivalent arg 'auto_delete' for queue 'game.fanout.queue.001' in vhost 'niuma': received 'true' but current is 'false'
+[0x000000016bc47000] 06-04T21:02:54.942134 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
+[0x00000001fb7d8840] 06-04T21:07:23.539453 info TimerManager.cpp:217 TimerManager started, threadNum: 3
+[0x00000001fb7d8840] 06-04T21:07:23.540135 info TcpServer.cpp:446 Tcp server startup, port: 10086, thread num: 4
+[0x00000001fb7d8840] 06-04T21:07:23.540489 info WebsocketServer.cpp:550 Websocket server startup, port: 9098, thread num: 2
+[0x00000001fb7d8840] 06-04T21:07:23.540554 info MysqlPool.cpp:319 Mysql pool started, host: tcp://127.0.0.1:3306, username: root, schema: niuma, keep connections: 3, max connections: 20, threadNum: 2
+[0x00000001fb7d8840] 06-04T21:07:23.540616 info RedisPool.cpp:854 Redis pool started, host: 8.156.81.51, port: 6379, database: 9, keep connections: 3, max connections: 20
+[0x00000001fb7d8840] 06-04T21:07:40.493000 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
+[0x00000001fb7d8840] 06-04T21:07:46.470584 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: current_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T21:07:47.456462 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: min_compatible_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T21:07:48.139739 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_percent) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T21:07:48.647288 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T21:07:49.334000 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_player_ids) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T21:07:49.334078 info VersionManager.cpp:78 版本管理器初始化完成，当前版本: 1.0.0，最低兼容版本: 1.0.0
+[0x00000001fb7d8840] 06-04T21:07:50.888203 info main.cpp:500 Server startup succeed.
+[0x000000016baab000] 06-04T21:16:23.408863 error RedisPool.cpp:120 Set (key: server_player_count:game_server_001) error: unknown error.
+[0x000000016baab000] 06-04T21:16:23.409442 error RedisPool.cpp:803 Connection error: Server closed the connection
+[0x000000016bb37000] 06-04T21:16:23.417767 error RedisPool.cpp:120 Set (key: server_keep_alive:game_server_001) error: unknown error.
+[0x000000016bb37000] 06-04T21:16:23.417823 error RedisPool.cpp:803 Connection error: Server closed the connection
+[0x000000016c13b000] 06-04T21:16:23.418531 error RabbitmqClient.cpp:419 Connection close.
+[0x000000016c13b000] 06-04T21:16:23.418558 error RabbitmqClient.cpp:471 Consume message error: connection closed unexpectedly
+[0x000000016bbc3000] 06-04T21:16:23.751296 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:16:24.941615 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:16:28.570757 error RabbitmqUtils.cpp:22 Closing connection connection closed unexpectedly
+[0x000000016c13b000] 06-04T21:16:32.097285 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016baab000] 06-04T21:16:32.329142 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:16:45.344417 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016bb37000] 06-04T21:16:45.365182 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:16:45.701122 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:16:46.036566 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:16:46.375930 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:16:47.746589 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:16:53.114690 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:16:53.123962 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016baab000] 06-04T21:16:53.453640 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:16:53.781192 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:16:54.126097 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:16:55.794890 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:16:56.456780 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:17:00.793272 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:17:00.796609 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016bb37000] 06-04T21:17:01.131587 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:17:01.469908 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:17:02.456540 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:17:03.129805 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:17:12.599762 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:17:12.606552 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016baab000] 06-04T21:17:12.995221 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:17:13.340294 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:17:13.673074 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:17:14.931908 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:17:19.807740 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:17:20.475527 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016bbc3000] 06-04T21:17:20.477548 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:17:20.815467 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:17:21.154104 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:17:22.818680 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:17:23.156304 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:17:37.615716 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016bbc3000] 06-04T21:17:42.060764 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:17:42.404776 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:17:42.753308 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:17:43.097645 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:17:43.148107 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016bb37000] 06-04T21:17:44.404900 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:17:51.042484 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:17:51.934952 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bb37000] 06-04T21:17:52.049126 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:17:52.379912 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:17:52.717620 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:17:54.381772 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:17:54.714381 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:18:09.118851 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016bbc3000] 06-04T21:18:24.836848 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:18:26.302619 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016c13b000] 06-04T21:18:43.475064 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016baab000] 06-04T21:18:46.249054 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:18:46.589607 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:18:46.930415 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:18:47.273423 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:18:47.615854 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:18:48.920114 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:18:49.004647 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016bb37000] 06-04T21:18:53.698670 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:19:06.186048 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016bbc3000] 06-04T21:19:18.966440 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:19:23.354882 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016bb37000] 06-04T21:19:34.555553 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:19:35.476292 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bbc3000] 06-04T21:19:40.906861 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:19:44.479656 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:19:44.664096 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bb37000] 06-04T21:19:46.317013 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:19:50.939809 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:19:53.756924 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016baab000] 06-04T21:19:54.604288 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:20:03.665874 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bbc3000] 06-04T21:20:04.461276 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:20:11.920135 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bb37000] 06-04T21:20:12.928741 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:20:18.759516 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:20:19.492407 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bb37000] 06-04T21:20:22.552637 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:20:26.010828 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bbc3000] 06-04T21:20:27.800703 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:20:30.563626 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:20:35.000959 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:20:35.004564 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bb37000] 06-04T21:20:38.655598 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:20:42.224735 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:20:44.154079 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bb37000] 06-04T21:20:44.163663 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:20:46.896081 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:20:53.235645 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bb37000] 06-04T21:20:53.474132 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:20:56.098726 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:20:59.026789 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:20:59.678589 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bbc3000] 06-04T21:21:01.532334 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:21:02.510746 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:21:04.264606 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:21:05.179273 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:21:06.753551 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bbc3000] 06-04T21:21:06.900523 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bb37000] 06-04T21:21:08.661238 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:21:10.503682 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016bbc3000] 06-04T21:21:11.472841 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:21:12.410722 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:21:12.786324 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bbc3000] 06-04T21:21:13.317370 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016baab000] 06-04T21:21:16.564859 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:21:19.596692 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016bb37000] 06-04T21:21:19.799368 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016c13b000] 06-04T21:21:25.818321 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:21:32.968976 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:21:40.015587 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:21:47.287321 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:21:54.568192 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:22:02.558655 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:22:10.707560 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:22:17.931831 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:22:26.051147 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:22:32.499043 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:22:39.982416 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:22:47.106541 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:22:55.127471 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:23:02.318554 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:23:09.347767 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:23:16.980834 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:23:25.857660 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:23:43.023909 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016c13b000] 06-04T21:23:50.330744 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:23:56.782965 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:24:03.808641 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:24:10.249501 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:24:19.300962 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:24:26.425644 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:24:33.104374 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:24:40.140071 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:24:46.625081 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:24:53.995765 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:25:00.712373 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:25:07.494344 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:25:14.515181 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:25:21.313138 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:25:27.357315 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:25:33.493340 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:25:40.682820 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:25:47.820910 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:25:54.153060 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:26:00.788094 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:26:08.556971 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:26:15.984012 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:26:23.122080 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:26:29.353820 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:26:35.942761 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:26:45.128319 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:26:52.404977 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:26:59.458420 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:27:06.834157 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:27:13.986108 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:27:22.283169 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:27:29.529276 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:27:36.792671 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:27:44.416905 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:27:54.885385 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:28:03.958821 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:28:10.448467 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:28:20.624109 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:28:30.428597 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:28:37.522404 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:28:45.773567 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:28:52.876647 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:28:59.267223 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:29:07.434595 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:29:14.579088 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:29:20.343205 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:29:26.864241 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:29:33.791461 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:29:41.053586 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:29:48.981287 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:29:55.433904 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:30:03.071660 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:30:11.124506 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:30:18.899945 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:30:25.564118 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:30:31.242657 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:30:38.033917 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:30:46.084234 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:30:53.684031 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:31:00.573582 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:31:07.473522 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:31:14.622752 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:31:23.760758 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:31:30.734851 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:31:38.683613 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:31:45.812857 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:31:52.861066 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:31:59.283451 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:32:05.796018 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:32:12.731819 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:32:19.751105 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:32:27.001492 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:32:36.804189 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:32:45.704993 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:32:54.639712 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:33:01.206134 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:33:09.508065 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:33:15.938298 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:33:22.323873 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:33:30.047389 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:33:36.348162 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:33:45.463612 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:33:52.792925 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:34:01.048740 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:34:08.316841 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:34:14.771498 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:34:22.149686 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:34:39.323892 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016c13b000] 06-04T21:34:53.379372 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:35:02.566453 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:35:11.207154 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:35:23.587753 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:35:33.363718 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:35:40.635647 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:35:48.193218 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:35:58.847721 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:36:09.550630 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:36:17.152676 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:36:25.269607 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:36:32.498436 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:36:39.653403 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:36:46.606497 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:36:53.672651 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:37:01.667092 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:37:15.335851 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:37:27.140018 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:37:40.624141 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:37:49.943171 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:37:58.143048 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:38:10.228814 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:38:17.137542 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:38:25.780079 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:38:34.400841 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:38:42.368505 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:38:49.565744 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:38:57.600487 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:39:04.556290 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:39:11.909192 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:39:19.517503 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:39:29.817357 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:39:37.978166 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:39:47.003673 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:39:53.370317 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:39:59.913267 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:40:06.843464 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:40:13.905359 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:40:21.373608 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:40:28.978814 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:40:37.083130 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:40:44.921418 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:40:53.161398 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:40:59.610446 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:41:09.519636 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:41:16.824737 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:41:24.101101 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:41:33.236077 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:41:43.198753 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:41:50.444243 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:41:57.706266 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:42:04.101352 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:42:11.711157 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:42:19.621030 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:42:26.639985 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:42:34.000800 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:42:40.963807 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:42:48.621953 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:42:56.156692 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:43:03.120659 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:43:09.566067 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:43:15.915723 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:43:22.354566 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:43:29.225809 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:43:36.406314 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:43:43.379609 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:43:50.165699 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:43:58.365575 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:44:06.540520 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:44:13.750441 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T21:44:33.642817 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
+[0x000000016c13b000] 06-04T22:00:32.880348 error RabbitmqClient.cpp:419 Connection close.
+[0x000000016c13b000] 06-04T22:00:32.881697 error RabbitmqClient.cpp:471 Consume message error: connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:00:38.072501 error RabbitmqUtils.cpp:22 Closing connection connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:00:40.891980 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:00:48.577866 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:01:01.660787 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:01:13.772437 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:01:21.433977 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:01:29.299124 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:01:39.201623 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:01:53.837183 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T22:01:59.360548 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:02:08.475720 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016c13b000] 06-04T22:02:16.523927 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016c13b000] 06-04T22:02:33.699254 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016c13b000] 06-04T22:03:05.473513 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
+[0x00000001fb7d8840] 06-04T22:07:30.420228 info TimerManager.cpp:217 TimerManager started, threadNum: 3
+[0x00000001fb7d8840] 06-04T22:07:30.420917 info TcpServer.cpp:446 Tcp server startup, port: 10086, thread num: 4
+[0x00000001fb7d8840] 06-04T22:07:30.421300 info WebsocketServer.cpp:550 Websocket server startup, port: 9098, thread num: 2
+[0x00000001fb7d8840] 06-04T22:07:30.421713 info MysqlPool.cpp:319 Mysql pool started, host: tcp://127.0.0.1:3306, username: root, schema: niuma, keep connections: 3, max connections: 20, threadNum: 2
+[0x00000001fb7d8840] 06-04T22:07:30.422072 info RedisPool.cpp:854 Redis pool started, host: 8.156.81.51, port: 6379, database: 9, keep connections: 3, max connections: 20
+[0x00000001fb7d8840] 06-04T22:07:45.821374 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
+[0x00000001fb7d8840] 06-04T22:07:53.079928 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: current_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:07:54.108919 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: min_compatible_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:07:55.560758 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_percent) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:07:56.483257 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:07:57.411172 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_player_ids) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:07:57.411291 info VersionManager.cpp:78 版本管理器初始化完成，当前版本: 1.0.0，最低兼容版本: 1.0.0
+[0x00000001fb7d8840] 06-04T22:08:02.017524 info main.cpp:500 Server startup succeed.
+[0x000000016ff87000] 06-04T22:11:21.840587 error RabbitmqClient.cpp:419 Connection close.
+[0x000000016ff87000] 06-04T22:11:21.840986 error RabbitmqClient.cpp:471 Consume message error: connection closed unexpectedly
+[0x000000016ff87000] 06-04T22:11:27.021623 error RabbitmqUtils.cpp:22 Closing connection socket is closed
+[0x000000016ff87000] 06-04T22:11:39.022737 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016ff87000] 06-04T22:12:06.202225 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
+[0x00000001fb7d8840] 06-04T22:32:09.907898 info TimerManager.cpp:217 TimerManager started, threadNum: 3
+[0x00000001fb7d8840] 06-04T22:32:09.908282 info TcpServer.cpp:446 Tcp server startup, port: 10086, thread num: 4
+[0x00000001fb7d8840] 06-04T22:32:09.908351 info WebsocketServer.cpp:550 Websocket server startup, port: 9098, thread num: 2
+[0x00000001fb7d8840] 06-04T22:32:09.908397 info MysqlPool.cpp:319 Mysql pool started, host: tcp://127.0.0.1:3306, username: root, schema: niuma, keep connections: 3, max connections: 20, threadNum: 2
+[0x00000001fb7d8840] 06-04T22:32:09.908425 info RedisPool.cpp:854 Redis pool started, host: 8.156.81.51, port: 6379, database: 9, keep connections: 3, max connections: 20
+[0x00000001fb7d8840] 06-04T22:32:21.913658 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x00000001fb7d8840] 06-04T22:32:29.234976 error RedisPool.cpp:758 Select database 9 failed, unknown error.
+[0x00000001fb7d8840] 06-04T22:32:29.575234 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x00000001fb7d8840] 06-04T22:32:29.913065 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x00000001fb7d8840] 06-04T22:32:30.253977 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x00000001fb7d8840] 06-04T22:32:30.590592 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x00000001fb7d8840] 06-04T22:32:30.928508 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x00000001fb7d8840] 06-04T22:32:30.928641 info VersionManager.cpp:78 版本管理器初始化完成，当前版本: 1.0.0，最低兼容版本: 1.0.0
+[0x00000001fb7d8840] 06-04T22:32:31.266936 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x00000001fb7d8840] 06-04T22:32:31.602692 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x00000001fb7d8840] 06-04T22:32:31.943310 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x00000001fb7d8840] 06-04T22:32:31.943695 info main.cpp:500 Server startup succeed.
+[0x000000016d98b000] 06-04T22:32:36.776208 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:32:37.111155 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:32:37.449624 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:32:38.277912 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:32:39.116328 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:32:47.224898 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:32:56.166382 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:32:56.508998 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:32:56.850720 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:32:57.187287 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:32:58.844010 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:33:03.675162 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:33:04.003342 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:33:04.347500 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:33:04.691971 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:33:06.337772 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:33:10.471576 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:33:11.205865 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:33:11.544782 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:33:11.879939 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:33:13.543949 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:33:13.878456 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:33:21.008819 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:33:21.345030 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:33:21.679361 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:33:22.013864 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:33:23.356364 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:33:26.958414 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:33:39.423133 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:33:43.306990 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:33:43.646404 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:33:44.009513 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:33:44.349050 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:33:45.982278 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:33:48.320863 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:33:58.237325 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:34:02.876525 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:34:07.422447 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:34:07.758587 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:34:08.094411 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:34:08.439749 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d98b000] 06-04T22:34:08.777988 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:34:10.096275 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:34:19.509091 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:34:25.314882 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016d8ff000] 06-04T22:34:34.347780 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016da17000] 06-04T22:34:38.877310 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016dd5f000] 06-04T22:45:20.298765 debug WebsocketServer.cpp:497 New connection(id: 4e1c7ce8-6ced-46a9-a573-4264e6bc01e3), remote endpoint: 192.168.1.133:52916
+[0x000000016dd5f000] 06-04T22:45:32.210553 debug WebsocketServer.cpp:497 New connection(id: a9d2e9d6-2ab6-441d-b725-f7be1ba8aeff), remote endpoint: 192.168.1.133:52970
+[0x000000016ddeb000] 06-04T22:45:32.212073 info WebsocketServer.cpp:223 Session(id: 4e1c7ce8-6ced-46a9-a573-4264e6bc01e3) close.
+[0x000000016d98b000] 06-04T22:46:03.083917 info WebsocketServer.cpp:712 Active close connection (uuid: a9d2e9d6-2ab6-441d-b725-f7be1ba8aeff), because it's inactive
+[0x000000016dd5f000] 06-04T22:46:03.084030 error WebsocketServer.cpp:226 Session(id: a9d2e9d6-2ab6-441d-b725-f7be1ba8aeff) error, msg: Operation canceled
+[0x000000016ddeb000] 06-04T22:46:03.098585 debug WebsocketServer.cpp:497 New connection(id: 5dd5f15a-b7ef-44f5-9949-c13e34f536ff), remote endpoint: 192.168.1.133:53122
+[0x000000016d98b000] 06-04T22:46:34.043674 info WebsocketServer.cpp:712 Active close connection (uuid: 5dd5f15a-b7ef-44f5-9949-c13e34f536ff), because it's inactive
+[0x000000016ddeb000] 06-04T22:46:34.043848 error WebsocketServer.cpp:226 Session(id: 5dd5f15a-b7ef-44f5-9949-c13e34f536ff) error, msg: Operation canceled
+[0x000000016ddeb000] 06-04T22:46:34.054705 debug WebsocketServer.cpp:497 New connection(id: 210eab2a-d59d-4b08-a425-83db1aaab6aa), remote endpoint: 192.168.1.133:53280
+[0x000000016dd5f000] 06-04T22:47:05.090828 info WebsocketServer.cpp:223 Session(id: 210eab2a-d59d-4b08-a425-83db1aaab6aa) close.
+[0x000000016da17000] 06-04T22:47:05.098259 error WebsocketServer.cpp:69 Close websocket error: Bad file descriptor [system:9]
+[0x000000016da17000] 06-04T22:47:05.098342 info WebsocketServer.cpp:712 Active close connection (uuid: 210eab2a-d59d-4b08-a425-83db1aaab6aa), because it's inactive
+[0x00000001fb7d8840] 06-04T22:47:32.792853 info TimerManager.cpp:217 TimerManager started, threadNum: 3
+[0x00000001fb7d8840] 06-04T22:47:32.793267 info TcpServer.cpp:446 Tcp server startup, port: 10086, thread num: 4
+[0x00000001fb7d8840] 06-04T22:47:32.793500 info WebsocketServer.cpp:550 Websocket server startup, port: 9098, thread num: 2
+[0x00000001fb7d8840] 06-04T22:47:32.793548 info MysqlPool.cpp:319 Mysql pool started, host: tcp://127.0.0.1:3306, username: root, schema: niuma, keep connections: 3, max connections: 20, threadNum: 2
+[0x00000001fb7d8840] 06-04T22:47:32.793575 info RedisPool.cpp:854 Redis pool started, host: 8.156.81.51, port: 6379, database: 9, keep connections: 3, max connections: 20
+[0x00000001fb7d8840] 06-04T22:47:56.055530 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
+[0x00000001fb7d8840] 06-04T22:48:03.408050 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: current_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:48:04.330191 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: min_compatible_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:48:06.057601 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_percent) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:48:07.040185 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_version) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:48:09.121717 error RedisPool.cpp:157 HGet (key: game_engine_version_config, field: gray_player_ids) error: value type is not supported.
+[0x00000001fb7d8840] 06-04T22:48:09.122027 info VersionManager.cpp:78 版本管理器初始化完成，当前版本: 1.0.0，最低兼容版本: 1.0.0
+[0x00000001fb7d8840] 06-04T22:48:17.118003 info main.cpp:500 Server startup succeed.
+[0x000000016f89f000] 06-04T22:48:33.220429 debug WebsocketServer.cpp:497 New connection(id: 488645c6-5f4a-4689-988c-08f98f81146d), remote endpoint: 192.168.1.133:53885
+[0x000000016f92b000] 06-04T22:48:35.096704 error WebsocketServer.cpp:226 Session(id: 488645c6-5f4a-4689-988c-08f98f81146d) error, msg: Socket is not connected
+[0x000000016facf000] 06-04T22:49:13.216944 error RabbitmqClient.cpp:419 Connection close.
+[0x000000016facf000] 06-04T22:49:13.217039 error RabbitmqClient.cpp:471 Consume message error: connection closed unexpectedly
+[0x000000016facf000] 06-04T22:49:18.364569 error RabbitmqUtils.cpp:22 Closing connection socket is closed
+[0x000000016facf000] 06-04T22:49:30.364245 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016facf000] 06-04T22:50:09.148293 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
+[0x000000016f43f000] 06-04T22:50:40.124642 error RedisPool.cpp:120 Set (key: server_keep_alive:game_server_001) error: unknown error.
+[0x000000016f43f000] 06-04T22:50:40.124724 error RedisPool.cpp:803 Connection error: Server closed the connection
+[0x000000016facf000] 06-04T22:50:40.268762 error RabbitmqClient.cpp:419 Connection close.
+[0x000000016facf000] 06-04T22:50:40.268815 error RabbitmqClient.cpp:471 Consume message error: connection closed unexpectedly
+[0x000000016f43f000] 06-04T22:50:42.276476 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:50:45.437755 error RabbitmqUtils.cpp:22 Closing connection connection closed unexpectedly
+[0x000000016facf000] 06-04T22:50:49.906513 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016f557000] 06-04T22:50:49.909064 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f557000] 06-04T22:50:50.246641 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f43f000] 06-04T22:50:57.432800 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:50:57.434466 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016f557000] 06-04T22:50:57.769544 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:51:14.607174 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016f557000] 06-04T22:51:17.095230 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f557000] 06-04T22:51:17.435832 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:51:20.127204 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016f43f000] 06-04T22:51:23.660725 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f43f000] 06-04T22:51:32.837881 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:51:32.845905 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016f43f000] 06-04T22:51:34.027362 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f557000] 06-04T22:51:36.184909 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:51:42.971032 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016facf000] 06-04T22:51:55.785614 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016f557000] 06-04T22:51:56.243335 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f557000] 06-04T22:51:56.577979 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f43f000] 06-04T22:52:03.174596 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:52:12.935139 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016f43f000] 06-04T22:52:14.022111 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:52:30.108293 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016f43f000] 06-04T22:52:34.021674 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f43f000] 06-04T22:52:40.239909 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:52:40.274474 error RabbitmqUtils.cpp:22 Logging in connection closed unexpectedly
+[0x000000016f43f000] 06-04T22:52:40.579042 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f43f000] 06-04T22:52:43.578067 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016f43f000] 06-04T22:52:57.322589 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:52:57.460838 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016facf000] 06-04T22:53:14.655291 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016f43f000] 06-04T22:53:26.675854 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:53:31.826378 error RabbitmqUtils.cpp:22 Logging in request timed out
+[0x000000016f43f000] 06-04T22:53:32.042096 error RedisPool.cpp:747 Authorization failed, unknown error.
+[0x000000016facf000] 06-04T22:53:41.135236 error RabbitmqUtils.cpp:22 Logging in invalid AMQP data
+[0x000000016facf000] 06-04T22:54:03.774400 info RabbitmqClient.cpp:219 Connect to rabbitmq server (8.156.81.51:5672), virtual host: niuma
