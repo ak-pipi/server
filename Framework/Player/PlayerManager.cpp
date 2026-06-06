@@ -1,6 +1,7 @@
 ﻿// PlayerManager.cpp
 
 #include "Base/BaseUtils.h"
+#include "Base/Log.h"
 #include "Constant/RedisKeys.h"
 #include "Redis/RedisPool.h"
 #include "Timer/TimerManager.h"
@@ -147,58 +148,75 @@ namespace NiuMa {
 		const std::string& nonce,
 		const std::string& signature,
 		bool& outdate) {
-		if (playerId.empty())
+		if (playerId.empty()) {
+			ErrorS << "Verify signature failed: empty playerId";
 			return false; // 玩家id非法
+		}
 		time_t time1 = BaseUtils::getCurrentSecond();
 		time_t time2 = atoll(timestamp.c_str());
 		time_t delta = abs(time1 - time2);
 		if (delta > 60L) {
 			// 传入时间戳与当前时间戳相差大于60秒
 			outdate = true;
+			ErrorS << "Verify signature failed: player(id:" << playerId << ") timestamp outdate, delta: " << delta;
 			return false;
 		}
 		std::string secret;
 		Player::Ptr player = loadPlayer(playerId);
 		if (!player) {
-			// 加载玩家失败
+			ErrorS << "Verify signature failed: load player(id:" << playerId << ") failed";
 			return false;
 		}
-		if (!player->testNonce(nonce, time2))
+		if (!player->testNonce(nonce, time2)) {
+			ErrorS << "Verify signature failed: player(id:" << playerId << ") nonce conflict";
 			return false;	// 随机串冲突
+		}
 		player->getSecret(secret);
 		bool test = false;
 		std::string redisKey;
 		if (secret.empty()) {
 			// 从redis中获取
 			redisKey = RedisKeys::PLAYER_MESSAGE_SECRET + playerId;
-			if (!RedisPool::getSingleton().get(redisKey, secret))
+			if (!RedisPool::getSingleton().get(redisKey, secret)) {
+				ErrorS << "Verify signature failed: player(id:" << playerId << ") redis secret missing";
 				return false;	// 从Redis获取密钥失败
+			}
 			if (!secret.empty())
 				player->setSecret(secret);
 			test = true;
 		}
-		if (secret.empty())
+		if (secret.empty()) {
+			ErrorS << "Verify signature failed: player(id:" << playerId << ") secret empty";
 			return false; // 未分配密钥
+		}
 		std::string text = playerId + '&' + timestamp + '&' + nonce + '&' + secret;
 		std::string md5;
 		BaseUtils::encodeMD5(text, md5);
 		if (md5 != signature) {
-			if (!test) {
-				// 尝试从Redis中获取密钥
-				std::string temp;
-				redisKey = RedisKeys::PLAYER_MESSAGE_SECRET + playerId;
-				if (!RedisPool::getSingleton().get(redisKey, temp))
-					return false;	// 从Redis获取密钥失败
-				if (temp == secret)
-					return false;	// 密钥未发生变化
-				secret = temp;
-				player->setSecret(secret);
-				if (secret.empty())
-					return false;
-				text = playerId + '&' + timestamp + '&' + nonce + '&' + secret;
-				BaseUtils::encodeMD5(text, md5);
-				if (md5 != signature)
-					return false;
+			if (test) {
+				ErrorS << "Verify signature failed: player(id:" << playerId << ") md5 mismatch";
+				return false;
+			}
+			// 尝试从Redis中获取密钥
+			std::string temp;
+			redisKey = RedisKeys::PLAYER_MESSAGE_SECRET + playerId;
+			if (!RedisPool::getSingleton().get(redisKey, temp)) {
+				ErrorS << "Verify signature failed: player(id:" << playerId << ") redis secret refresh failed";
+				return false;	// 从Redis获取密钥失败
+			}
+			if (temp == secret) {
+				ErrorS << "Verify signature failed: player(id:" << playerId << ") md5 mismatch after redis refresh";
+				return false;	// 密钥未发生变化
+			}
+			secret = temp;
+			player->setSecret(secret);
+			if (secret.empty())
+				return false;
+			text = playerId + '&' + timestamp + '&' + nonce + '&' + secret;
+			BaseUtils::encodeMD5(text, md5);
+			if (md5 != signature) {
+				ErrorS << "Verify signature failed: player(id:" << playerId << ") md5 mismatch with refreshed secret";
+				return false;
 			}
 		}
 		return true;

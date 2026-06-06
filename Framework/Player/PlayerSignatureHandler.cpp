@@ -4,6 +4,7 @@
 #include "PlayerManager.h"
 #include "PlayerMessages.h"
 #include "Network/SecurityManager.h"
+#include "Base/Log.h"
 
 namespace NiuMa
 {
@@ -25,6 +26,8 @@ namespace NiuMa
 		bool outdate = false;
 		if (!PlayerManager::getSingleton().verifySignature(sign->getPlayerId(),
 			sign->getTimestamp(), sign->getNonce(), sign->getSignature(), outdate)) {
+			ErrorS << "Player(id:" << sign->getPlayerId() << ") signature verify failed"
+				<< ", outdate: " << (outdate ? "true" : "false");
 			if (!outdate) {
 				// 签名验证失败，记录一次异常行为
 				const std::string& remoteIp = session->getRemoteIp();
