@@ -484,6 +484,7 @@ namespace NiuMa
 						catch (...) {
 							ErrorS << "Close socket error.";
 						}
+						doAccept();
 						return;
 					}
 					std::shared_ptr<WebsocketConnection> con = std::make_shared<WebsocketConnection>(strongRef, std::move(socket));

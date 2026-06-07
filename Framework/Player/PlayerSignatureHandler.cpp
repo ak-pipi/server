@@ -1,5 +1,6 @@
 ﻿// PlayerSignatureHandler.cpp
 
+#include "Base/Log.h"
 #include "PlayerSignatureHandler.h"
 #include "PlayerManager.h"
 #include "PlayerMessages.h"
@@ -22,6 +23,10 @@ namespace NiuMa
 		if (!session)
 			return false;
 		// 验证玩家签名数据
+		DebugS << "Signature check: playerId=" << sign->getPlayerId()
+			<< ", timestamp=" << sign->getTimestamp()
+			<< ", nonce=" << sign->getNonce()
+			<< ", signature=" << sign->getSignature();
 		bool outdate = false;
 		if (!PlayerManager::getSingleton().verifySignature(sign->getPlayerId(),
 			sign->getTimestamp(), sign->getNonce(), sign->getSignature(), outdate)) {
@@ -30,6 +35,7 @@ namespace NiuMa
 				const std::string& remoteIp = session->getRemoteIp();
 				SecurityManager::getSingleton().abnormalBehavior(remoteIp);
 			}
+			WarningS << "Send MsgPlayerSignatureError to player(id:" << sign->getPlayerId() << "), ip:" << session->getRemoteIp() << ", msgType:" << msg->getType();
 			MsgPlayerSignatureError resp;
 			resp.outdate = outdate;
 			resp.send(session);

@@ -153,7 +153,7 @@ namespace NiuMa {
 			else if (getValue(reply, value)) {
 				ret = true;
 			}
-			else {
+			else if (!isNilReply(reply)) {
 				ErrorS << "HGet (key: " << key << ", field: " << field << ") error: value type is not supported.";
 			}
 			checkConnection(con, flag);
@@ -818,9 +818,15 @@ namespace NiuMa {
 				value = reply->str;
 			else if (REDIS_REPLY_INTEGER == reply->type)
 				value = std::to_string(reply->integer);
+			else if (REDIS_REPLY_NIL == reply->type)
+				ret = false;
 			else
 				ret = false;
 			return ret;
+		}
+
+		bool isNilReply(redisReply* reply) {
+			return reply != nullptr && REDIS_REPLY_NIL == reply->type;
 		}
 
 	private:

@@ -111,9 +111,13 @@ namespace NiuMa {
 		if (buf == nullptr || length == 0)
 			return;
 
+		std::string sessionId;
+		getId(sessionId);
 		const std::string& remoteIp = getRemoteIp();
-		if (SecurityManager::getSingleton().checkBlacklist(remoteIp))
+		if (SecurityManager::getSingleton().checkBlacklist(remoteIp)) {
+			WarningS << "Message from blacklisted ip(" << remoteIp << ") dropped, session: " << sessionId;
 			return;
+		}
 
 		_data->_unpacker.reserve_buffer(length);
 
@@ -131,6 +135,7 @@ namespace NiuMa {
 				MsgBase::Ptr msg = MessageManager::getSingleton().createMessage(wrapper);
 				if (msg) {
 					NetMessage::Ptr netMsg = std::make_shared<NetMessage>(shared_from_this(), msg, wrapper->getType());
+					DebugS << "Message received, type: " << wrapper->getType() << ", from ip: " << remoteIp;
 					pushMsg(netMsg);
 				}
 				else {
