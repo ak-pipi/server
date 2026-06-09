@@ -31,6 +31,9 @@ namespace NiuMa
 		// 是否带花牌
 		virtual bool hasFlower() const;
 
+		// 是否带字牌（东南西北中发白）
+		virtual bool hasZiPai() const;
+
 		// 
 		void set13Lan(bool s);
 

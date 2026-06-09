@@ -19,7 +19,7 @@ namespace NiuMa
 	class MahjongDealer
 	{
 	public:
-		MahjongDealer(bool bFlower = false);
+		MahjongDealer(bool bFlower = false, bool bZiPai = true);
 		virtual ~MahjongDealer();
 
 	protected:

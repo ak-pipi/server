@@ -9,6 +9,7 @@
 
 #define TILE_NUMS_NO_FLOWER		136
 #define TILE_NUMS_HAS_FLOWER	144
+#define TILE_NUMS_NO_ZIPAI		108
 
 namespace NiuMa
 {
@@ -113,9 +114,9 @@ namespace NiuMa
 	std::shared_ptr<MahjongTileGenerator> MahjongTileGenerator::s_inst;
 	std::mutex MahjongTileGenerator::s_mtx;
 
-	MahjongDealer::MahjongDealer(bool bFlower)
+	MahjongDealer::MahjongDealer(bool bFlower, bool bZiPai)
 		: _flower(bFlower)
-		, _totalTileNums(bFlower ? TILE_NUMS_HAS_FLOWER : TILE_NUMS_NO_FLOWER)
+		, _totalTileNums(bFlower ? TILE_NUMS_HAS_FLOWER : (bZiPai ? TILE_NUMS_NO_FLOWER : TILE_NUMS_NO_ZIPAI))
 		, _tilePool{0}
 		, _start(0)
 		, _end(0)

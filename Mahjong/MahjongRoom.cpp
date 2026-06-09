@@ -14,7 +14,7 @@ namespace NiuMa
 	MahjongRoom::MahjongRoom(const MahjongRule::Ptr& rule, const std::string& venueId, int gameType, int maxPlayerNums)
 		: GameRoom(venueId, gameType, maxPlayerNums)
 		, _rule(rule)
-		, _dealer(rule->hasFlower())
+		, _dealer(rule->hasFlower(), rule->hasZiPai())
 		, _acOpIdAlloc(0)
 		, _banker(0)
 		, _actor(0)

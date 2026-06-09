@@ -23,8 +23,17 @@
 
 namespace NiuMa
 {
+	/**
+	 * 桃江麻将规则：无字牌（东南西北中发白），108张牌
+	 */
+	class TaoJiangMahjongRule : public MahjongRule
+	{
+	public:
+		bool hasZiPai() const override { return false; }
+	};
+
 	TaoJiangMahjongRoom::TaoJiangMahjongRoom(const std::string& venueId, const std::string& number, int level, const std::string& ruleConfig)
-		: MahjongRoom(std::make_shared<MahjongRule>(), venueId, static_cast<int>(GameType::TaoJiangMahjong), 2)
+		: MahjongRoom(std::make_shared<TaoJiangMahjongRule>(), venueId, static_cast<int>(GameType::TaoJiangMahjong), 2)
 		, _number(number)
 		, _level(level)
 		, _roundState(StageState::NotStarted)

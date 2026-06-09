@@ -17,6 +17,10 @@ namespace NiuMa
 		return false;
 	}
 
+	bool MahjongRule::hasZiPai() const {
+		return true;
+	}
+
 	void MahjongRule::set13Lan(bool s) {
 		_13Lan = s;
 	}
