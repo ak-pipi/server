@@ -30,6 +30,14 @@ namespace NiuMa
 	{
 	public:
 		bool hasZiPai() const override { return false; }
+
+		// 桃江麻将将牌必须是2、5、8数字的牌
+		bool isValidJiangTile(const MahjongTile::Tile& tile) const override {
+			MahjongTile::Number num = tile.getNumber();
+			return (num == MahjongTile::Number::Er
+				|| num == MahjongTile::Number::Wu
+				|| num == MahjongTile::Number::Ba);
+		}
 	};
 
 	TaoJiangMahjongRoom::TaoJiangMahjongRoom(const std::string& venueId, const std::string& number, int level, const std::string& ruleConfig)

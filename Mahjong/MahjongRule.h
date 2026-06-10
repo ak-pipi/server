@@ -85,6 +85,9 @@ namespace NiuMa
 		// 检测扩展的胡牌样式
 		virtual bool checkHuStyleEx(const MahjongTileArray& tiles, MahjongGenre::TingPaiArray& tps, MahjongAvatar* pAvatar) const;
 
+		// 判断某张牌是否可以作为将牌（雀头），默认所有牌都可以
+		virtual bool isValidJiangTile(const MahjongTile::Tile& tile) const;
+
 	private:
 		bool checkPingHu(const MahjongTile::TileArray& tiles, MahjongGenre::TingPaiArray& tps, MahjongTile::Pattern pat, PingHuStyle* pStyle = nullptr) const;
 		bool checkPingHu(const MahjongTile::TileArray& tiles, MahjongTile::Tile pai, PingHuStyle* pStyle = nullptr) const;

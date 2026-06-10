@@ -518,7 +518,7 @@ namespace NiuMa
 			if (tiles[i] == pai)
 				tmp++;
 			else {
-				if (tmp > 1) {
+				if (tmp > 1 && isValidJiangTile(pai)) {
 					if (checkPingHu3n2(tiles, pai, pStyle))
 						return true;
 				}
@@ -526,7 +526,7 @@ namespace NiuMa
 				pai = tiles[i];
 			}
 		}
-		if (tmp > 1) {
+		if (tmp > 1 && isValidJiangTile(pai)) {
 			if (checkPingHu3n2(tiles, pai, pStyle))
 				return true;
 		}
@@ -816,5 +816,9 @@ namespace NiuMa
 
 	bool MahjongRule::checkHuStyleEx(const MahjongTileArray& tiles, MahjongGenre::TingPaiArray& tps, MahjongAvatar* pAvatar) const {
 		return false;
+	}
+
+	bool MahjongRule::isValidJiangTile(const MahjongTile::Tile& tile) const {
+		return true;
 	}
 }

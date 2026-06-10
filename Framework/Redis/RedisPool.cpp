@@ -91,11 +91,14 @@ namespace NiuMa {
 				flag = true;
 				ErrorS << "Get (key: " << key << ") error: " << reply->str;
 			}
+			else if (REDIS_REPLY_NIL == reply->type) {
+				// key 不存在，正常情况
+			}
 			else if (getValue(reply, value)) {
 				ret = true;
 			}
 			else {
-				ErrorS << "Get (key: " << key << ") error: value type is not supported.";
+				ErrorS << "Get (key: " << key << ") error: value type is not supported (reply type: " << reply->type << ").";
 			}
 			checkConnection(con, flag);
 			return ret;
