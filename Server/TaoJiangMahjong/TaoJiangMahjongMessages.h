@@ -1,4 +1,4 @@
-﻿// TaoJiangMahjongMessages.h
+// TaoJiangMahjongMessages.h
 
 #ifndef _NIU_MA_TAOJIANG_MAHJONG_MESSAGES_H_
 #define _NIU_MA_TAOJIANG_MAHJONG_MESSAGES_H_
@@ -89,6 +89,10 @@ namespace NiuMa
 		// 庄家座位号
 		int banker;
 
+		int roundNo;
+
+		int roundCount;
+
 		// 牌池剩余牌数量
 		int leftTiles;
 
@@ -108,7 +112,7 @@ namespace NiuMa
 		MahjongChapterArray chapters[4];
 
 		MSGPACK_DEFINE_MAP(number, gold, diamond, diZhu, chi, dianPao, hasFetch,
-			seat, roundState, disbandState, banker, leftTiles, handTileNums,
+			seat, roundState, disbandState, banker, roundNo, roundCount, leftTiles, handTileNums,
 			fetchTile, handTiles, playedTiles, chapters);
 	};
 
@@ -133,7 +137,11 @@ namespace NiuMa
 		// 庄家座位号
 		int banker;
 
-		MSGPACK_DEFINE_MAP(banker);
+		int roundNo;
+
+		int roundCount;
+
+		MSGPACK_DEFINE_MAP(banker, roundNo, roundCount);
 	};
 
 	/**

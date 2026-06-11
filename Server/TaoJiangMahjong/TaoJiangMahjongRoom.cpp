@@ -1,4 +1,4 @@
-﻿// TaoJiangMahjongRoom.cpp
+// TaoJiangMahjongRoom.cpp
 
 #include "Base/BaseUtils.h"
 #include "Base/Log.h"
@@ -236,6 +236,8 @@ namespace NiuMa
 		msg.roundState = static_cast<int>(_roundState);
 		msg.disbandState = static_cast<int>(_disbandState);
 		msg.banker = _banker;
+		msg.roundNo = _roundNo;
+		msg.roundCount = _roundCount;
 		msg.leftTiles = _dealer.getTileLeft();
 		TaoJiangMahjongAvatar* tmpAvatar = NULL;
 		if (_roundState == StageState::Underway) {
@@ -301,24 +303,6 @@ namespace NiuMa
 
 		clean();
 
-		MsgTJStartRound msg;
-		msg.banker = _banker;
-		std::ostringstream os;
-		os << "桃江麻将牌桌(Id:" << getId() << ")开局，各玩家Id: ";
-		TaoJiangMahjongAvatar* avatar = nullptr;
-		for (int i = 0; i < getMaxPlayerNums(); i++) {
-			avatar = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
-			if (avatar == nullptr)
-				continue;
-			if (i > 0)
-				os << "、";
-			os << avatar->getPlayerId();
-			msg.send(avatar->getSession());
-		}
-		LOG_INFO(os.str());
-
-		dealTiles();
-
 		if (_roundNo == 0) {
 			class GetMaxRoundNoTask : public MysqlQueryTask {
 			public:
@@ -356,6 +340,26 @@ namespace NiuMa
 				_roundNo = task->_maxRoundNo;
 		}
 		_roundNo++;
+
+		MsgTJStartRound msg;
+		msg.banker = _banker;
+		msg.roundNo = _roundNo;
+		msg.roundCount = _roundCount;
+		std::ostringstream os;
+		os << "桃江麻将牌桌(Id:" << getId() << ")开局，各玩家Id: ";
+		TaoJiangMahjongAvatar* avatar = nullptr;
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			avatar = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
+			if (avatar == nullptr)
+				continue;
+			if (i > 0)
+				os << "、";
+			os << avatar->getPlayerId();
+			msg.send(avatar->getSession());
+		}
+		LOG_INFO(os.str());
+
+		dealTiles();
 	}
 
 	double* TaoJiangMahjongRoom::getDistances() {
@@ -602,6 +606,11 @@ namespace NiuMa
 
 	void TaoJiangMahjongRoom::afterHu() {
 		saveRoundRecord();
+
+		if (_roundCount > 0 && _roundNo >= _roundCount) {
+			disbandRoom();
+			return;
+		}
 
 		GameAvatar::Ptr avatar;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
