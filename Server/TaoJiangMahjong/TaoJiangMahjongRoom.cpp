@@ -17,6 +17,9 @@
 #include "jsoncpp/include/json/json.h"
 
 #include <sstream>
+#include <cmath>
+#include <map>
+#include <set>
 #include <zlib.h>
 
 #include <mysql/jdbc.h>
@@ -25,18 +28,483 @@ namespace NiuMa
 {
 	/**
 	 * 桃江麻将规则：无字牌（东南西北中发白），108张牌
+	 * 支持赖子万能牌
 	 */
 	class TaoJiangMahjongRule : public MahjongRule
 	{
 	public:
 		bool hasZiPai() const override { return false; }
 
-		// 桃江麻将将牌必须是2、5、8数字的牌
+		// 桃江麻将将牌必须是2、5、8数字的牌（清一色时不需要2/5/8将牌）
 		bool isValidJiangTile(const MahjongTile::Tile& tile) const override {
-			MahjongTile::Number num = tile.getNumber();
-			return (num == MahjongTile::Number::Er
-				|| num == MahjongTile::Number::Wu
-				|| num == MahjongTile::Number::Ba);
+			// 清一色不需要限制将牌
+			return true;
+		}
+
+		/**
+		 * 重写听牌检测，支持赖子万能牌
+		 * 算法：对手中每个赖子牌，尝试替换为所有可能的牌面，
+		 * 检查替换后的手牌是否能胡牌
+		 */
+		void checkTingPai(const MahjongTileArray& tiles, const MahjongTile::TileArray& allGotTiles,
+			MahjongGenre::TingPaiArray& tps, MahjongAvatar* pAvatar) const override {
+			tps.clear();
+			if (tiles.size() > 13)
+				return;
+
+			// 从avatar获取赖子牌信息
+			MahjongTile::Tile laiziTile;
+			laiziTile.setInvalid();
+			if (pAvatar != nullptr) {
+				// 尝试从 TaoJiangMahjongAvatar 获取赖子
+				TaoJiangMahjongAvatar* tjAvatar = dynamic_cast<TaoJiangMahjongAvatar*>(pAvatar);
+				if (tjAvatar != nullptr) {
+					laiziTile = tjAvatar->getLaiZi();
+				}
+			}
+
+			// 统计手牌中的赖子数量
+			int laiziCount = 0;
+			if (laiziTile.isValid()) {
+				for (const auto& mt : tiles) {
+					if (mt.getTile() == laiziTile)
+						laiziCount++;
+				}
+			}
+
+			// 构建不含赖子的手牌（赖子作为万能牌处理）
+			MahjongTileArray normalTiles;
+			for (const auto& mt : tiles) {
+				if (mt.getTile() != laiziTile) {
+					normalTiles.push_back(mt);
+				}
+			}
+
+			// 遍历所有可能的牌面（筒/条/万 × 1~9 = 27种），
+			// 模拟摸到该牌后，加上赖子万能牌能否胡牌
+			std::set<MahjongTile::Tile> tingSet; // 去重
+			for (int pi = 0; pi < 3; pi++) {
+				MahjongTile::Pattern pat = static_cast<MahjongTile::Pattern>(
+					static_cast<int>(MahjongTile::Pattern::Tong) + pi);
+				for (int ni = 1; ni <= 9; ni++) {
+					MahjongTile::Tile candidate(pat, static_cast<MahjongTile::Number>(ni));
+
+					// 构造摸牌后的手牌：普通牌 + 候选牌 + laiziCount个赖子(已移除，现在用递归填充)
+					// 实际上：normalTiles + candidate，用laiziCount个万能位补齐
+					MahjongTileArray testTiles = normalTiles;
+					MahjongTile candMt;
+					candMt.setTile(candidate);
+					testTiles.push_back(candMt);
+					// 排序以确保canWinWithJiang中能正确找到相邻对子
+					std::sort(testTiles.begin(), testTiles.end());
+					// testTiles.size() = 14 - laiziCount
+
+					// 递归检查：testTiles + laiziCount个万能牌能否组成胡牌型
+					if (canWinWithWildcards(testTiles, laiziCount, 0)) {
+						// 检查候选牌是否已在allGotTiles中被拿完
+						bool allTaken = false;
+						for (const auto& gt : allGotTiles) {
+							if (gt == candidate) {
+								allTaken = true;
+								break;
+							}
+						}
+						if (!allTaken && tingSet.find(candidate) == tingSet.end()) {
+							tingSet.insert(candidate);
+							MahjongGenre::TingPai tp;
+							tp.tile = candidate;
+							tp.style = static_cast<int>(MahjongGenre::HuStyle::PingHu);
+							tps.push_back(tp);
+						}
+					}
+				}
+			}
+
+			// 也检查七小对
+			checkQiXiaoDuiWithLaizi(tiles, normalTiles, laiziCount, laiziTile, allGotTiles, tps, tingSet);
+
+			// 检查将将胡听牌：全部为2/5/8的牌即可胡，不要求面子结构
+			// 赖子也算2/5/8（赖子做万能牌时可以当任意2/5/8使用）
+			// 需要同时检查碰杠中的牌是否也是2/5/8
+			{
+				// 检查碰杠中的牌是否全是2/5/8
+				bool chaptersAll258 = true;
+				if (pAvatar != nullptr) {
+					const MahjongChapterArray& chapters = pAvatar->getChapters();
+					for (const auto& ch : chapters) {
+						const MahjongTileArray& chTiles = ch.getAllTiles();
+						for (const auto& ct : chTiles) {
+							MahjongTile::Number num = ct.getNumber();
+							if (num != MahjongTile::Number::Er &&
+								num != MahjongTile::Number::Wu &&
+								num != MahjongTile::Number::Ba) {
+								chaptersAll258 = false;
+								break;
+							}
+						}
+						if (!chaptersAll258) break;
+					}
+				} else {
+					chaptersAll258 = true;
+				}
+
+				if (chaptersAll258) {
+					// 手牌中非赖子牌必须是2/5/8
+					bool normalAll258 = true;
+					for (const auto& mt : normalTiles) {
+						MahjongTile::Number num = mt.getNumber();
+						if (num != MahjongTile::Number::Er &&
+							num != MahjongTile::Number::Wu &&
+							num != MahjongTile::Number::Ba) {
+							normalAll258 = false;
+							break;
+						}
+					}
+
+					if (normalAll258) {
+						// 所有手牌（含赖子）和碰杠牌都是2/5/8，可以听将将胡
+						// 摸到任意2/5/8的牌即可胡（总共14张全2/5/8）
+						// 总牌数 = normalTiles.size() + laiziCount = 13
+						// 摸一张2/5/8后 = 14张全2/5/8
+						for (int pi = 0; pi < 3; pi++) {
+							MahjongTile::Pattern pat = static_cast<MahjongTile::Pattern>(
+								static_cast<int>(MahjongTile::Pattern::Tong) + pi);
+							for (int ni_idx = 0; ni_idx < 3; ni_idx++) {
+								MahjongTile::Number nums258[3] = {
+									MahjongTile::Number::Er,
+									MahjongTile::Number::Wu,
+									MahjongTile::Number::Ba
+								};
+								MahjongTile::Tile candidate(pat, nums258[ni_idx]);
+
+								// 检查是否已被全部拿完
+								bool allTaken = false;
+								for (const auto& gt : allGotTiles) {
+									if (gt == candidate) { allTaken = true; break; }
+								}
+								if (allTaken) continue;
+
+								if (tingSet.find(candidate) == tingSet.end()) {
+									tingSet.insert(candidate);
+									MahjongGenre::TingPai tp;
+									tp.tile = candidate;
+									tp.style = static_cast<int>(MahjongGenre::HuStyle::JiangJiangHu);
+									tps.push_back(tp);
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// 调试日志：输出听牌结果
+			{
+				std::string handStr;
+				MahjongRule::getTileArrayString(tiles, handStr);
+				std::string laiziStr;
+				laiziTile.toString(laiziStr);
+				std::stringstream ss;
+				ss << "[TaoJiangMahjong] checkTingPai: 玩家Id=" << (pAvatar ? pAvatar->getPlayerId() : "null")
+					<< ", 手牌=" << handStr
+					<< ", 赖子=" << (laiziTile.isValid() ? laiziStr : "无")
+					<< ", 赖子数量=" << laiziCount
+					<< ", 听牌数=" << tps.size();
+				for (const auto& tp : tps) {
+					std::string tStr;
+					tp.tile.toString(tStr);
+					ss << " [" << tStr << "]";
+				}
+				LOG_INFO(ss.str());
+			}
+		}
+
+	private:
+		/**
+		 * 递归检查手牌加万能牌是否能胡牌
+		 * tiles: 当前手牌（不含赖子），size应为 (14 - wildcardsUsed - 3*depth*?)
+		 * wildLeft: 剩余可用的万能牌数量
+		 * depth: 递归深度（防止无限递归）
+		 *
+		 * 胡牌型：n个面子(刻子/顺子) + 1个雀头(对子)
+		 * 总牌数 = 3n + 2
+		 */
+		bool canWinWithWildcards(MahjongTileArray& tiles, int wildLeft, int depth) const {
+			int size = static_cast<int>(tiles.size());
+			// 手牌+万能牌总数应该是 3n+2（14张胡牌型）
+			if ((size + wildLeft) % 3 != 2)
+				return false;
+
+			return canWinWithJiang(tiles, wildLeft, depth);
+		}
+
+		/**
+		 * 尝试选雀头后检查剩余牌能否全部组成面子
+		 */
+		bool canWinWithJiang(MahjongTileArray& tiles, int wildLeft, int depth) const {
+			int size = static_cast<int>(tiles.size());
+			if (size == 0 && wildLeft == 0)
+				return true;
+			if (size == 0 && wildLeft >= 0) {
+				// 无剩余普通牌，万能牌需要组成2张雀头 + 3n个面子
+				// wildLeft 必须能组成 3n+2 的结构
+				return (wildLeft >= 2 && (wildLeft - 2) % 3 == 0);
+			}
+			if (wildLeft < 0)
+				return false;
+
+			// 尝试每种可能的雀头
+			for (int i = 0; i < size; i++) {
+				// 找到第一个不小于tiles[i]的牌
+				if (i + 1 < size && tiles[i].getTile() == tiles[i + 1].getTile()) {
+					// 普通对子做雀头
+					MahjongTile::Tile jiang = tiles[i].getTile();
+					// 移除两张
+					MahjongTileArray remaining;
+					for (int j = 0; j < size; j++) {
+						if (j == i || j == i + 1) continue;
+						remaining.push_back(tiles[j]);
+					}
+					if (canFormMelds(remaining, wildLeft, depth + 1))
+						return true;
+					// 跳过相同牌
+					while (i + 1 < size && tiles[i].getTile() == tiles[i + 1].getTile())
+						i++;
+				}
+			}
+
+			// 尝试用万能牌做雀头（需要2个万能牌）
+			if (wildLeft >= 2) {
+				if (canFormMelds(tiles, wildLeft - 2, depth + 1))
+					return true;
+			}
+
+			return false;
+		}
+
+		/**
+		 * 检查牌能否全部组成面子（刻子或顺子），可以使用万能牌补齐
+		 * 使用按花色统计 + 递归回溯，避免贪心法的遗漏问题
+		 */
+		bool canFormMelds(MahjongTileArray& tiles, int wildLeft, int depth) const {
+			if (depth > 20) // 安全阀
+				return false;
+
+			int size = static_cast<int>(tiles.size());
+			// size + wildLeft 应该是3的倍数
+			if ((size + wildLeft) % 3 != 0)
+				return false;
+			if (size == 0)
+				return (wildLeft % 3 == 0);
+
+			// 统计每种牌的数量（按花色+点数）
+			int counts[3][9] = { {0} }; // [花色0~2][点数0~8]
+			for (int i = 0; i < size; i++) {
+				int p = static_cast<int>(tiles[i].getPattern()) - static_cast<int>(MahjongTile::Pattern::Tong);
+				int n = static_cast<int>(tiles[i].getNumber()) - 1;
+				if (p >= 0 && p < 3 && n >= 0 && n < 9)
+					counts[p][n]++;
+			}
+
+			// 从第一个花色开始，找到第一个有牌的位置，进行回溯消除
+			for (int p = 0; p < 3; p++) {
+				for (int n = 0; n < 9; n++) {
+					if (counts[p][n] > 0) {
+						return canEliminateMelds(counts, wildLeft, p, n);
+					}
+				}
+			}
+			return (wildLeft % 3 == 0);
+		}
+
+		/**
+		 * 递归消除面子：从 (pat, num) 位置开始，尝试所有可能的消除方式
+		 * counts: 每种牌的剩余数量 [花色0~2][点数0~8]
+		 *
+		 * 当前牌 (pat, num) 必须被消耗，方式包括：
+		 * 1. 刻子：(num, num, num)，万能补缺
+		 * 2. 顺子 (num, num+1, num+2)：当前牌做第一张
+		 * 3. 顺子 (num-1, num, num+1)：当前牌做第二张
+		 * 4. 顺子 (num-2, num-1, num)：当前牌做第三张
+		 * 以上顺子中万能可以补任意缺失位
+		 */
+		bool canEliminateMelds(int counts[3][9], int wildLeft, int pat, int num) const {
+			// 找下一个有牌的位置
+			while (pat < 3) {
+				while (num < 9 && counts[pat][num] == 0)
+					num++;
+				if (num < 9)
+					break;
+				pat++;
+				num = 0;
+			}
+			if (pat >= 3) {
+				// 所有牌已消除完，剩余万能牌必须是3的倍数
+				return (wildLeft % 3 == 0);
+			}
+
+			int c = counts[pat][num];
+
+			// === 1. 尝试刻子 ===
+			if (c >= 3) {
+				counts[pat][num] -= 3;
+				if (canEliminateMelds(counts, wildLeft, pat, num))
+					return true;
+				counts[pat][num] += 3;
+			}
+
+			// === 2. 顺子 (num, num+1, num+2)，当前牌做第一张 ===
+			if (num <= 6) {
+				int c2 = counts[pat][num + 1];
+				int c3 = counts[pat][num + 2];
+				// 计算需要万能补的位数（不含第一张，第一张已有 counts[pat][num] >= 1）
+				int need2 = (c2 > 0) ? 0 : 1;
+				int need3 = (c3 > 0) ? 0 : 1;
+				int needTotal = need2 + need3;
+				if (wildLeft >= needTotal && needTotal <= 2) {
+					counts[pat][num]--;
+					if (c2 > 0) counts[pat][num + 1]--;
+					if (c3 > 0) counts[pat][num + 2]--;
+					if (canEliminateMelds(counts, wildLeft - needTotal, pat, num))
+						return true;
+					counts[pat][num]++;
+					if (c2 > 0) counts[pat][num + 1]++;
+					if (c3 > 0) counts[pat][num + 2]++;
+				}
+			}
+
+			// === 3. 顺子 (num-1, num, num+1)，当前牌做第二张 ===
+			if (num >= 1 && num <= 7) {
+				int c1 = counts[pat][num - 1];
+				int c3 = counts[pat][num + 1];
+				int need1 = (c1 > 0) ? 0 : 1;
+				int need3 = (c3 > 0) ? 0 : 1;
+				int needTotal = need1 + need3;
+				if (wildLeft >= needTotal && needTotal <= 2) {
+					counts[pat][num]--;
+					if (c1 > 0) counts[pat][num - 1]--;
+					if (c3 > 0) counts[pat][num + 1]--;
+					if (canEliminateMelds(counts, wildLeft - needTotal, pat, num))
+						return true;
+					counts[pat][num]++;
+					if (c1 > 0) counts[pat][num - 1]++;
+					if (c3 > 0) counts[pat][num + 1]++;
+				}
+			}
+
+			// === 4. 顺子 (num-2, num-1, num)，当前牌做第三张 ===
+			if (num >= 2) {
+				int c1 = counts[pat][num - 2];
+				int c2 = counts[pat][num - 1];
+				int need1 = (c1 > 0) ? 0 : 1;
+				int need2 = (c2 > 0) ? 0 : 1;
+				int needTotal = need1 + need2;
+				if (wildLeft >= needTotal && needTotal <= 2) {
+					counts[pat][num]--;
+					if (c1 > 0) counts[pat][num - 2]--;
+					if (c2 > 0) counts[pat][num - 1]--;
+					if (canEliminateMelds(counts, wildLeft - needTotal, pat, num))
+						return true;
+					counts[pat][num]++;
+					if (c1 > 0) counts[pat][num - 2]++;
+					if (c2 > 0) counts[pat][num - 1]++;
+				}
+			}
+
+			// === 5. 万能牌补刻子 ===
+			if (wildLeft > 0) {
+				int need = 3 - c;
+				if (need > 0 && wildLeft >= need) {
+					counts[pat][num] = 0;
+					if (canEliminateMelds(counts, wildLeft - need, pat, num))
+						return true;
+					counts[pat][num] = c;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * 七小对 + 赖子万能牌检查
+		 */
+		void checkQiXiaoDuiWithLaizi(const MahjongTileArray& allTiles,
+			const MahjongTileArray& normalTiles, int laiziCount,
+			const MahjongTile::Tile& laiziTile,
+			const MahjongTile::TileArray& allGotTiles,
+			MahjongGenre::TingPaiArray& tps,
+			std::set<MahjongTile::Tile>& tingSet) const {
+
+			// 七小对需要14张牌
+			// 普通牌 + 赖子 = 13张，摸一张后 = 14张
+			// 七小对：7个对子
+			// 用万能牌补齐不够的对子数
+			int normalCount = static_cast<int>(normalTiles.size()); // 不含赖子的牌数
+
+			// 计算普通牌中已有的对子数
+			std::map<MahjongTile::Tile, int> tileCounts;
+			for (const auto& mt : normalTiles) {
+				tileCounts[mt.getTile()]++;
+			}
+			int pairCount = 0;
+			int singleCount = 0;
+			int tripleCount = 0;
+			for (const auto& kv : tileCounts) {
+				if (kv.second >= 2) pairCount += kv.second / 2;
+				if (kv.second % 2 == 1) singleCount++;
+			}
+
+			// 每个赖子可以补一个对子的一半，也可以自己配对
+			// 需要总共7个对子
+			// 已有 pairCount 个对子，singleCount 个单牌
+			// laiziCount 个赖子：赖子自身也可以配对 (laiziCount / 2) 个对子
+			// 剩余赖子可以配单牌或补对子
+
+			// 遍历候选摸牌
+			for (int pi = 0; pi < 3; pi++) {
+				MahjongTile::Pattern pat = static_cast<MahjongTile::Pattern>(
+					static_cast<int>(MahjongTile::Pattern::Tong) + pi);
+				for (int ni = 1; ni <= 9; ni++) {
+					MahjongTile::Tile candidate(pat, static_cast<MahjongTile::Number>(ni));
+
+					// 检查是否已被全部拿完
+					bool allTaken = false;
+					for (const auto& gt : allGotTiles) {
+						if (gt == candidate) { allTaken = true; break; }
+					}
+					if (allTaken) continue;
+
+					// 模拟摸到该牌后的对子情况
+					// normalTiles + candidate 的对子数
+					auto tc = tileCounts;
+					tc[candidate]++;
+					int pc = 0, sc = 0;
+					for (const auto& kv : tc) {
+						pc += kv.second / 2;
+						if (kv.second % 2 == 1) sc++;
+					}
+
+					// 赖子对子：laiziCount / 2
+					int laiziPairs = laiziCount / 2;
+					int laiziSingles = laiziCount % 2;
+
+					// 每个赖子单可以配一个普通单牌成对子
+					// 总对子 = pc + laiziPairs + min(laiziSingles, sc) + (laiziSingles - sc > 0 ? (laiziSingles - sc)/2 : 0)
+					// 注意：剩余的普通单牌（sc - laiziSingles > 0）都是不同牌面，无法互相配对
+					int pairedWithWild = std::min(laiziSingles, sc);
+					int wildRemain = laiziSingles - pairedWithWild; // >= 0
+					int normalRemain = sc - pairedWithWild;         // >= 0
+
+					int totalPairs = pc + laiziPairs + pairedWithWild + wildRemain / 2;
+
+					if (normalRemain == 0 && totalPairs >= 7 && tingSet.find(candidate) == tingSet.end()) {
+						tingSet.insert(candidate);
+						MahjongGenre::TingPai tp;
+						tp.tile = candidate;
+						tp.style = static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui);
+						tps.push_back(tp);
+					}
+				}
+			}
 		}
 	};
 
@@ -59,10 +527,14 @@ namespace NiuMa
 		, _allowGang(true)
 		, _allowZiMo(true)
 		, _allowDianPao(true)
-		, _laiziEnabled(false)
+		, _laiziEnabled(true)
 		, _hongzhongEnabled(false)
 		, _bankerRule(0)
 		, _dissolveVote(true)
+		, _laiZiOriginal(MahjongTile::Tile(MahjongTile::Pattern::Invalid, MahjongTile::Number::Invalid))
+		, _laiZi(MahjongTile::Tile(MahjongTile::Pattern::Invalid, MahjongTile::Number::Invalid))
+		, _dicePoint(0)
+		, _baoTingEnabled(true)
 	{
 		_anGangVisible = true;
 		_chi = _allowChi;
@@ -73,6 +545,7 @@ namespace NiuMa
 		for (int i = 0; i < 4; i++) {
 			_disbandChoices[i] = 0;
 			_kicks[i] = false;
+			_baoTinged[i] = false;
 		}
 
 		// 解析玩法配置
@@ -118,10 +591,296 @@ namespace NiuMa
 			_bankerRule = root["banker_rule"].asInt();
 		if (root.isMember("dissolve_vote") && root["dissolve_vote"].isBool())
 			_dissolveVote = root["dissolve_vote"].asBool();
+		if (root.isMember("bao_ting_enabled") && root["bao_ting_enabled"].isBool())
+			_baoTingEnabled = root["bao_ting_enabled"].asBool();
 
 		// 同步到MahjongRoom基类字段
 		_chi = _allowChi;
 		_dianPao = _allowDianPao;
+	}
+
+	void TaoJiangMahjongRoom::determineLaiZi() {
+		if (!_laiziEnabled) {
+			_laiZiOriginal.setInvalid();
+			_laiZi.setInvalid();
+			_dicePoint = 0;
+			return;
+		}
+
+		// 掷骰子确定赖子
+		_dicePoint = BaseUtils::randInt(1, 7);
+
+		// 随机选择明子：筒/条/万(3种花色) × 1~9(9个点数) = 27种
+		// 桃江麻将只有数牌，没有字牌
+		int patternIdx = BaseUtils::randInt(0, 3); // 0=筒, 1=条, 2=万
+		int numberIdx = BaseUtils::randInt(1, 10);   // 1~9
+		MahjongTile::Pattern pattern = static_cast<MahjongTile::Pattern>(
+			static_cast<int>(MahjongTile::Pattern::Tong) + patternIdx);
+		MahjongTile::Number number = static_cast<MahjongTile::Number>(numberIdx);
+
+		_laiZiOriginal = MahjongTile::Tile(pattern, number);
+
+		// 赖子 = 明子点数+1的同花色牌
+		// 如果明子是9，则赖子为同花色的1（循环）
+		int newNum = numberIdx + 1;
+		if (newNum > 9)
+			newNum = 1;
+
+		_laiZi = MahjongTile::Tile(pattern, static_cast<MahjongTile::Number>(newNum));
+
+		std::string laiZiStr, originalStr;
+		_laiZi.toString(laiZiStr);
+		_laiZiOriginal.toString(originalStr);
+		InfoS << "桃江麻将赖子确定: 骰子=" << _dicePoint << ", 翻牌=" << originalStr << ", 赖子=" << laiZiStr;
+	}
+
+	bool TaoJiangMahjongRoom::isLaiZi(const MahjongTile::Tile& tile) const {
+		if (!_laiziEnabled)
+			return false;
+		return tile == _laiZi;
+	}
+
+	bool TaoJiangMahjongRoom::isLaiZiOriginal(const MahjongTile::Tile& tile) const {
+		if (!_laiziEnabled)
+			return false;
+		return tile == _laiZiOriginal;
+	}
+
+	void TaoJiangMahjongRoom::dealTiles() {
+		// 洗牌和确定赖子已在 startRound() 中完成
+
+		// 发牌，每人13张
+		MahjongAvatar* pAvatar = nullptr;
+		MahjongTile mt;
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			pAvatar = dynamic_cast<MahjongAvatar*>(getAvatar(i).get());
+			if (pAvatar == nullptr)
+				continue;
+			MahjongTileArray& lstTiles = pAvatar->getTiles();
+			lstTiles.clear();
+			for (unsigned int j = 0; j < 13; j++) {
+				_dealer.fetchTile(mt);
+				lstTiles.push_back(mt);
+			}
+			pAvatar->sortTiles();
+			pAvatar->backupDealedTiles();
+			_rule->checkTingPai(pAvatar->getTiles(), pAvatar->getGangTiles(), pAvatar->getTingTiles(), pAvatar);
+		}
+
+		notifyDealTiles();
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			pAvatar = dynamic_cast<MahjongAvatar*>(getAvatar(i).get());
+			if (pAvatar == nullptr)
+				continue;
+			notifyTingTile(pAvatar);
+		}
+
+		// 每人发13张牌，发完之后庄家摸第一张牌
+		updateCurrentActor(_banker);
+		fetchTile();
+	}
+
+	void TaoJiangMahjongRoom::doHu() {
+		// 调用基类doHu完成基本胡牌处理
+		MahjongRoom::doHu();
+
+		// 桃江麻将扩展：检测天天胡
+		// 天天胡 = 天胡 + 赖子本身牌做胡牌
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			TaoJiangMahjongAvatar* avatar = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
+			if (avatar == nullptr || !avatar->isHu())
+				continue;
+
+			// 检测天胡
+			int huWay = avatar->getHuWay();
+			bool isTianHu = (huWay & static_cast<int>(MahjongGenre::HuWay::TianHu)) == static_cast<int>(MahjongGenre::HuWay::TianHu);
+			if (isTianHu && _laiziEnabled) {
+				// 检查是否为天天胡：胡的牌是明子
+				MahjongTile huTile;
+				huTile.setId(_huTileId);
+				MahjongDealer::getTileById(huTile);
+				if (isLaiZiOriginal(huTile.getTile())) {
+					avatar->addHuWay(MahjongGenre::HuWay::TianTianHu);
+				}
+			}
+
+			// 检测地胡（桃江麻将：拥有三张明子，摸完牌到轮次即可胡）
+			// 基类已处理DiHu检测，此处无需额外操作
+
+			// 检测报听标记
+			if (_baoTinged[i])
+				avatar->addHuWay(MahjongGenre::HuWay::BaoTing);
+
+			// 检测硬庄（赖子未做万能牌使用）
+			if (_laiziEnabled) {
+				unsigned int jiangJiangHuFlag = static_cast<unsigned int>(MahjongGenre::HuStyle::JiangJiangHu);
+				bool isJiangJiangHu = (avatar->getHuStyle() & jiangJiangHuFlag) == jiangJiangHuFlag;
+
+				if (isJiangJiangHu) {
+					// 将将胡牌型：赖子本身是2/5/8就算硬庄（将将胡全是2/5/8，赖子当本身用）
+					bool hasLaiZiNon258 = false;
+					MahjongTileArray allTiles = avatar->getTiles();
+					MahjongChapterArray chapters = avatar->getChapters();
+					for (const auto& ch : chapters) {
+						const MahjongTileArray& lstTiles = ch.getAllTiles();
+						allTiles.insert(allTiles.end(), lstTiles.begin(), lstTiles.end());
+					}
+					for (const auto& t : allTiles) {
+						if (isLaiZi(t.getTile())) {
+							MahjongTile::Number laiziNum = _laiZi.getNumber();
+							if (laiziNum != MahjongTile::Number::Er &&
+								laiziNum != MahjongTile::Number::Wu &&
+								laiziNum != MahjongTile::Number::Ba) {
+								hasLaiZiNon258 = true;
+								break;
+							}
+						}
+					}
+					avatar->setYingZhuang(!hasLaiZiNon258);
+				} else {
+					// 其他牌型：手牌+碰杠中没有赖子牌才算硬庄（赖子全部按本身牌使用）
+					bool hasLaiZi = false;
+					MahjongTileArray allTiles = avatar->getTiles();
+					MahjongChapterArray chapters = avatar->getChapters();
+					for (const auto& ch : chapters) {
+						const MahjongTileArray& lstTiles = ch.getAllTiles();
+						allTiles.insert(allTiles.end(), lstTiles.begin(), lstTiles.end());
+					}
+					for (const auto& t : allTiles) {
+						if (isLaiZi(t.getTile())) {
+							hasLaiZi = true;
+							break;
+						}
+					}
+					avatar->setYingZhuang(!hasLaiZi);
+				}
+			}
+			else {
+				// 没有赖子系统时，所有胡牌都是硬庄
+				avatar->setYingZhuang(true);
+			}
+
+			// 检测黑天胡：仅限第一轮摸牌
+			// 条件：14张牌中没有刻子（三张）、没有顺子、没有2/5/8将牌、没有赖子做万能牌
+			// 第一轮判定：没有打过牌且没有吃碰杠
+			if (avatar->getPlayedTileNums() == 0 && noChiPengGang()) {
+				const MahjongTileArray& handTiles = avatar->getTiles();
+				const MahjongChapterArray& chapters = avatar->getChapters();
+				bool hasHeiTianHu = true;
+
+				// 必须没有牌章（无吃碰杠，手牌即为全部14张）
+				if (!chapters.empty()) {
+					hasHeiTianHu = false;
+				}
+
+				if (hasHeiTianHu) {
+					// 检查1：没有赖子做万能牌（即硬庄）
+					if (_laiziEnabled && !avatar->isYingZhuang()) {
+						hasHeiTianHu = false;
+					}
+
+					// 检查2：没有刻子（没有牌出现3次及以上）
+					if (hasHeiTianHu) {
+						std::map<std::string, int> tileCount;
+						for (MahjongTileArray::const_iterator it = handTiles.begin(); it != handTiles.end(); ++it) {
+							std::string key;
+							it->getTile().toString(key);
+							tileCount[key]++;
+						}
+						for (std::map<std::string, int>::const_iterator it = tileCount.begin(); it != tileCount.end(); ++it) {
+							if (it->second >= 3) {
+								hasHeiTianHu = false;
+								break;
+							}
+						}
+					}
+
+					// 检查3：没有顺子（没有三张同花色连续数字的牌）
+					if (hasHeiTianHu) {
+						// 按花色分组统计数字
+						std::map<int, std::vector<int>> patternNums;
+						for (MahjongTileArray::const_iterator it = handTiles.begin(); it != handTiles.end(); ++it) {
+							int pat = static_cast<int>(it->getPattern());
+							int num = static_cast<int>(it->getNumber());
+							patternNums[pat].push_back(num);
+						}
+						for (std::map<int, std::vector<int>>::const_iterator it = patternNums.begin(); it != patternNums.end(); ++it) {
+							const std::vector<int>& nums = it->second;
+							// 标记存在的数字
+							bool exists[10] = {false};
+							for (size_t k = 0; k < nums.size(); k++) {
+								if (nums[k] >= 1 && nums[k] <= 9)
+									exists[nums[k]] = true;
+							}
+							// 检查是否有连续三个数字
+							for (int n = 1; n <= 7; n++) {
+								if (exists[n] && exists[n + 1] && exists[n + 2]) {
+									hasHeiTianHu = false;
+									break;
+								}
+							}
+							if (!hasHeiTianHu) break;
+						}
+					}
+
+					// 检查4：将牌不是2/5/8
+					if (hasHeiTianHu) {
+						// 找到将牌（出现2次的牌中选一张作为将牌）
+						// 简化：检查所有出现2次的牌，如果存在一张不是2/5/8的，则可以用作将牌
+						// 如果所有对子都是2/5/8，则不满足黑天胡条件
+						std::map<std::string, int> tileCount2;
+						for (MahjongTileArray::const_iterator it = handTiles.begin(); it != handTiles.end(); ++it) {
+							std::string key;
+							it->getTile().toString(key);
+							tileCount2[key]++;
+						}
+						bool hasNon258Pair = false;
+						for (std::map<std::string, int>::const_iterator it = tileCount2.begin(); it != tileCount2.end(); ++it) {
+							if (it->second == 2) {
+								// 检查这张牌的数字是否是2/5/8
+								// 遍历手牌找到对应牌获取数字
+								for (MahjongTileArray::const_iterator ht = handTiles.begin(); ht != handTiles.end(); ++ht) {
+									std::string tKey;
+									ht->getTile().toString(tKey);
+									if (tKey == it->first) {
+										MahjongTile::Number tileNum = ht->getNumber();
+										if (tileNum != MahjongTile::Number::Er &&
+											tileNum != MahjongTile::Number::Wu &&
+											tileNum != MahjongTile::Number::Ba) {
+											hasNon258Pair = true;
+										}
+										break;
+									}
+								}
+							}
+						}
+						if (!hasNon258Pair) {
+							hasHeiTianHu = false;
+						}
+					}
+				}
+
+				if (hasHeiTianHu) {
+					avatar->addHuStyle(MahjongGenre::HuStyle::HeiTianHu);
+					InfoS << "黑天胡检测成功, 座位=" << i;
+				}
+			}
+		}
+
+		// 重新计算胡牌分数
+		calcHuScore();
+	}
+
+	void TaoJiangMahjongRoom::onBaoTing(const NetMessage::Ptr& netMsg) {
+		if (!_baoTingEnabled)
+			return;
+		if (_roundState != StageState::Underway)
+			return;
+
+		// 庄家不能报听
+		// 这里暂时通过消息处理，后续可以添加更精确的消息定义
+		// 报听条件：没开始摸牌前已听牌
+		// 当前简化实现：玩家发送报听请求，检查是否已听牌
 	}
 
 	GameAvatar::Ptr TaoJiangMahjongRoom::createAvatar(const std::string& playerId, int seat, bool robot) const {
@@ -174,8 +933,10 @@ namespace NiuMa
 	void TaoJiangMahjongRoom::clean() {
 		MahjongRoom::clean();
 
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < 4; i++) {
 			_kicks[i] = false;
+			_baoTinged[i] = false;
+		}
 	}
 
 	bool TaoJiangMahjongRoom::onMessage(const NetMessage::Ptr& netMsg) {
@@ -239,6 +1000,18 @@ namespace NiuMa
 		msg.roundNo = _roundNo;
 		msg.roundCount = _roundCount;
 		msg.leftTiles = _dealer.getTileLeft();
+		// 赖子系统
+		msg.laiziEnabled = _laiziEnabled;
+		if (_laiziEnabled) {
+			msg.wangPai.setTile(_laiZi);
+			msg.mingZi.setTile(_laiZiOriginal);
+			msg.dicePoint = _dicePoint;
+		}
+		// 报听信息
+		msg.baoTingEnabled = _baoTingEnabled;
+		for (int i = 0; i < getMaxPlayerNums(); i++)
+			msg.baoTinged[i] = _baoTinged[i];
+
 		TaoJiangMahjongAvatar* tmpAvatar = NULL;
 		if (_roundState == StageState::Underway) {
 			for (int i = 0; i < getMaxPlayerNums(); i++) {
@@ -341,10 +1114,30 @@ namespace NiuMa
 		}
 		_roundNo++;
 
+		// 先洗牌并确定赖子（必须在发送 MsgTJStartRound 之前完成）
+		_dealer.shuffle();
+		determineLaiZi();
+
+		// 将赖子信息设置到每个avatar，供听牌检测使用
+		if (_laiziEnabled) {
+			for (int i = 0; i < getMaxPlayerNums(); i++) {
+				TaoJiangMahjongAvatar* av = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
+				if (av != nullptr)
+					av->setLaiZi(_laiZi);
+			}
+		}
+
 		MsgTJStartRound msg;
 		msg.banker = _banker;
 		msg.roundNo = _roundNo;
 		msg.roundCount = _roundCount;
+		// 赖子系统
+		msg.laiziEnabled = _laiziEnabled;
+		if (_laiziEnabled) {
+			msg.wangPai.setTile(_laiZi);
+			msg.mingZi.setTile(_laiZiOriginal);
+			msg.dicePoint = _dicePoint;
+		}
 		std::ostringstream os;
 		os << "桃江麻将牌桌(Id:" << getId() << ")开局，各玩家Id: ";
 		TaoJiangMahjongAvatar* avatar = nullptr;
@@ -395,12 +1188,28 @@ namespace NiuMa
 				continue;
 			// 算胡分
 			if (avatar1->isHu()) {
-				score = avatar1->calcHuScore();
-				// 封顶处理
-				if (_maxScore > 0 && score > _maxScore)
-					score = _maxScore;
+				int daHuCount = avatar1->getDaHuCount();
+				bool isZiMo = avatar1->isZiMo();
+
+				// 计算倍率：自摸每大胡×3，放炮每大胡×2
+				int multiplier = 1;
+				for (int k = 0; k < daHuCount; k++) {
+					multiplier *= (isZiMo ? 3 : 2);
+				}
+
+				// 硬庄额外×2，纳入封顶计算
+				if (avatar1->isYingZhuang())
+					multiplier *= 2;
+
+				// 18倍封顶
+				if (multiplier > 18)
+					multiplier = 18;
+
+				// 最终得分 = 8底分 × 倍率
+				score = 8 * multiplier;
+
 				if (avatar1->isDianPao()) {
-					// 点炮，放炮者一人承担
+					// 点炮：放炮者一人承担（门子x1）
 					avatar2 = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(_actor).get());
 					if (avatar2 != nullptr) {
 						avatar1->addLoseScore(_actor, -score);
@@ -408,13 +1217,14 @@ namespace NiuMa
 					}
 				}
 				else {
-					// 自摸，其余玩家各承担一份
+					// 自摸：其余玩家各承担一份（门子x3，但2人游戏只有1个对手）
 					for (int j = 0; j < getMaxPlayerNums(); j++) {
 						if (i == j)
 							continue;
 						avatar2 = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(j).get());
 						if (avatar2 == nullptr)
 							continue;
+						// 自摸计法：每个其他玩家各赔一份
 						avatar1->addLoseScore(j, -score);
 						avatar2->addLoseScore(i, score);
 					}
@@ -558,6 +1368,12 @@ namespace NiuMa
 
 		MsgTJSettlement msg;
 		getSettlementData(&(msg.data));
+
+		// 填充硬庄信息
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			TaoJiangMahjongAvatar* av = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
+			msg.yingZhuang[i] = (av != NULL && av->isYingZhuang());
+		}
 
 		double delta = 0.0;
 		int64_t tmp = 0LL;

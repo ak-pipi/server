@@ -111,9 +111,21 @@ namespace NiuMa
 		// 所有玩家的牌章
 		MahjongChapterArray chapters[4];
 
+		// 赖子系统
+		bool laiziEnabled;
+		MahjongTile wangPai;          // 王牌（赖子/万能牌，客户端展示用）
+		MahjongTile mingZi;           // 明子（骰子翻出的牌）
+		int dicePoint;              // 骰子点数
+
+		// 报听信息
+		bool baoTingEnabled;
+		bool baoTinged[4];          // 各玩家是否已报听
+
 		MSGPACK_DEFINE_MAP(number, gold, diamond, diZhu, chi, dianPao, hasFetch,
 			seat, roundState, disbandState, banker, roundNo, roundCount, leftTiles, handTileNums,
-			fetchTile, handTiles, playedTiles, chapters);
+			fetchTile, handTiles, playedTiles, chapters,
+			laiziEnabled, wangPai, mingZi, dicePoint,
+			baoTingEnabled, baoTinged);
 	};
 
 	/**
@@ -141,7 +153,14 @@ namespace NiuMa
 
 		int roundCount;
 
-		MSGPACK_DEFINE_MAP(banker, roundNo, roundCount);
+		// 赖子系统
+		bool laiziEnabled;
+		MahjongTile wangPai;          // 王牌（赖子/万能牌）
+		MahjongTile mingZi;           // 明子（骰子翻出的牌）
+		int dicePoint;
+
+		MSGPACK_DEFINE_MAP(banker, roundNo, roundCount,
+			laiziEnabled, wangPai, mingZi, dicePoint);
 	};
 
 	/**
@@ -172,10 +191,13 @@ namespace NiuMa
 		// 所有玩家的本局获利的金币数量
 		int winGolds[4];
 
+		// 所有玩家是否为硬庄（赖子未做万能牌）
+		bool yingZhuang[4];
+
 		// 结算数据
 		MahjongSettlement data;
 
-		MSGPACK_DEFINE_MAP(kick, golds, winGolds, data);
+		MSGPACK_DEFINE_MAP(kick, golds, winGolds, yingZhuang, data);
 	};
 
 	/**

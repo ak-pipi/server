@@ -37,7 +37,11 @@ namespace NiuMa
 			QiXiaoDui3			= (0x00000400 | QiXiaoDui),	// 三豪华七小对
 			ShiSanYao			= 0x00000800,				// 十三幺
 			ShiSanLan			= 0x00001000,				// 十三烂
-			QiXingShiSanLan		= (0x00002000 | ShiSanLan)	// 七星十三烂
+			QiXingShiSanLan		= (0x00002000 | ShiSanLan),	// 七星十三烂
+
+			// ---- 桃江麻将扩展胡牌样式 ----
+			JiangJiangHu			= 0x00010000,				// 将将胡（全部为2、5、8的牌组合）
+			HeiTianHu				= 0x00020000				// 黑天胡（全部为数字牌且无赖子参与胡牌）
 		};
 		
 		// 胡牌方式
@@ -66,7 +70,11 @@ namespace NiuMa
 			QiangGangHu1		= (0x00080000 | DianPao),	// 抢杠胡
 			QiangGangHu2		= (0x00100000 | DianPao),	// 二连抢杠胡
 			QiangGangHu3		= (0x00200000 | DianPao),	// 三连抢杠胡
-			QiangGangHu4		= (0x00400000 | DianPao)	// 四连抢杠胡
+			QiangGangHu4		= (0x00400000 | DianPao),	// 四连抢杠胡
+
+			// ---- 桃江麻将扩展胡牌方式 ----
+			BaoTing				= 0x00800000,				// 报听（摸牌前已听牌）
+			TianTianHu			= 0x01000000				// 天天胡（天胡+赖子本身胡牌）
 		};
 
 		// 听牌

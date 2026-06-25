@@ -5,6 +5,7 @@
 
 #include "MahjongRoom.h"
 #include "../GameDefines.h"
+#include "MahjongTile.h"
 
 #include <string>
 
@@ -70,6 +71,36 @@ namespace NiuMa
 		 * 开始新一局
 		 */
 		void startRound();
+
+		/**
+		 * 玩家请求报听
+		 */
+		void onBaoTing(const NetMessage::Ptr& netMsg);
+
+		/**
+		 * 开局确定赖子（骰子翻出明子，明子点数+1同花色为赖子）
+		 */
+		void determineLaiZi();
+
+		/**
+		 * 检测某张牌是否为赖子
+		 */
+		bool isLaiZi(const MahjongTile::Tile& tile) const;
+
+		/**
+		 * 检测某张牌是否为明子（骰子翻出来的那张牌）
+		 */
+		bool isLaiZiOriginal(const MahjongTile::Tile& tile) const;
+
+		/**
+		 * 重写发牌，在发牌前确定赖子
+		 */
+		virtual void dealTiles() override;
+
+		/**
+		 * 重写胡牌检测，添加天天胡和地胡检测（桃江麻将特有规则）
+		 */
+		virtual void doHu() override;
 
 		/**
 		 * 通知发起解散投票
@@ -221,6 +252,35 @@ namespace NiuMa
 		 * 是否允许投票解散
 		 */
 		bool _dissolveVote;
+
+		// ---- 赖子系统 ----
+
+		/**
+		 * 明子（骰子翻出来的那张牌，本身不是赖子）
+		 */
+		MahjongTile::Tile _laiZiOriginal;
+
+		/**
+		 * 赖子（明子点数+1的同花色牌，可做万能牌使用）
+		 */
+		MahjongTile::Tile _laiZi;
+
+		/**
+		 * 骰子点数
+		 */
+		int _dicePoint;
+
+		// ---- 报听系统 ----
+
+		/**
+		 * 各玩家是否已报听
+		 */
+		bool _baoTinged[4];
+
+		/**
+		 * 报听是否可用（true=开启报听功能）
+		 */
+		bool _baoTingEnabled;
 	};
 }
 

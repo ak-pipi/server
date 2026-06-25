@@ -56,6 +56,18 @@ namespace NiuMa
 		// 清理
 		virtual void clean() override;
 
+		// 更新当前执行动作的玩家索引（指定玩家）
+		void updateCurrentActor(int player);
+
+		// 取牌
+		bool fetchTile(bool bBack = false);
+
+		// 胡牌，胡方式检测和算分
+		virtual void doHu();
+
+		// 没有吃碰杠
+		bool noChiPengGang() const;
+
 	private:
 		/**
 		 * 处理执行动作选项消息
@@ -95,14 +107,8 @@ namespace NiuMa
 		// 更新当前执行动作的玩家索引
 		void updateCurrentActor();
 
-		// 更新当前执行动作的玩家索引
-		void updateCurrentActor(int player);
-
 		// 状态跳转
 		void changeState(StateMachine eNewState);
-
-		// 取牌
-		bool fetchTile(bool bBack = false);
 
 		// 情况所有玩家的所有动作选项
 		void clearActionOptions();
@@ -131,18 +137,12 @@ namespace NiuMa
 		// 在摸牌、吃牌、碰牌之后通知出牌或者杠(加杠及暗杠)
 		void afterFetchChiPeng(MahjongAvatar* pAvatar, int fetchedId = -1);
 
-		// 胡牌，胡方式检测和算分
-		void doHu();
-
 		// 流局处理
 		void noMoreTile();
 
-		// 没有吃碰杠
-		bool noChiPengGang() const;
-
 	protected:
 		// 发牌
-		void dealTiles();
+		virtual void dealTiles();
 
 		// 获取第一个正在等待的动作选项
 		bool getFirstWaitingActionOption(MahjongActionOption& ao) const;

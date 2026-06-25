@@ -1,4 +1,4 @@
-﻿// TaoJiangMahjongMessages.cpp
+// TaoJiangMahjongMessages.cpp
 
 #include "TaoJiangMahjongMessages.h"
 #include "Message/MessageManager.h"
@@ -21,9 +21,14 @@ namespace NiuMa
 		, disbandState(0)
 		, banker(0)
 		, leftTiles(0)
+		, laiziEnabled(false)
+		, dicePoint(0)
+		, baoTingEnabled(false)
 	{
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < 4; i++) {
 			handTileNums[i] = 0;
+			baoTinged[i] = false;
+		}
 	}
 
 	MsgTJSyncResp::~MsgTJSyncResp() {}
@@ -32,6 +37,10 @@ namespace NiuMa
 
 	MsgTJStartRound::MsgTJStartRound()
 		: banker(0)
+		, roundNo(0)
+		, roundCount(0)
+		, laiziEnabled(false)
+		, dicePoint(0)
 	{}
 
 	MsgTJStartRound::~MsgTJStartRound() {}
@@ -44,6 +53,7 @@ namespace NiuMa
 		for (int i = 0; i < 4; i++) {
 			golds[i] = 0LL;
 			winGolds[i] = 0;
+			yingZhuang[i] = false;
 		}
 	}
 

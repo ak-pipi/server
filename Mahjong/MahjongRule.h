@@ -42,7 +42,7 @@ namespace NiuMa
 
 		// 检测听牌，注意传入的牌数组必须是经过排序的
 		// 参数allGotTiles为玩家手上加上碰杠吃总数达到4个的牌类型列表，当前为简化算法，传入该参数的牌仅仅为杠的牌
-		void checkTingPai(const MahjongTileArray& tiles, const MahjongTile::TileArray& allGotTiles, MahjongGenre::TingPaiArray& tps, MahjongAvatar* pAvatar) const;
+		virtual void checkTingPai(const MahjongTileArray& tiles, const MahjongTile::TileArray& allGotTiles, MahjongGenre::TingPaiArray& tps, MahjongAvatar* pAvatar) const;
 
 		// 检测传入的牌数组是否为清一色
 		bool checkQingYiSe(const MahjongTileArray& tiles) const;
