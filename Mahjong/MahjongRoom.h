@@ -60,7 +60,7 @@ namespace NiuMa
 		void updateCurrentActor(int player);
 
 		// 取牌
-		bool fetchTile(bool bBack = false);
+		virtual bool fetchTile(bool bBack = false);
 
 		// 胡牌，胡方式检测和算分
 		virtual void doHu();
@@ -156,6 +156,14 @@ namespace NiuMa
 	protected:
 		// 是否可以点炮
 		virtual bool canDianPao() const;
+
+		/**
+		 * 判断是否允许某个玩家对某张牌进行点炮（子类可覆写以实现特殊规则）
+		 * @param pAvatar 要点炮的玩家
+		 * @param mt 对手打出的牌
+		 * @return true=允许点炮, false=不允许（如桃江麻将平胡不能抓炮）
+		 */
+		virtual bool shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const MahjongTile& mt) const;
 
 		// 是否提前结束(流局)
 		virtual bool earlyTermination() const;

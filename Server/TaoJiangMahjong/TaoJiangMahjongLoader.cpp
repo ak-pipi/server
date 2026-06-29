@@ -23,13 +23,17 @@ namespace NiuMa
 			LoadTask(const std::string& id)
 				: _venueId(id)
 				, _level(0)
+				, _districtId(0)
 			{}
 
 			virtual ~LoadTask() {}
 
 		public:
 			virtual QueryType buildQuery(std::string& sql) override {
-				sql = "select `number`, `level`, `rule_config` from `game_taojiang_mahjong` where `venue_id` = \"" + _venueId + "\"";
+				// 联合 venue 表查询 district_id，用于区域匹配房间的 Redis 维护
+				sql = "select t.`number`, t.`level`, t.`rule_config`, v.`district_id` "
+					"from `game_taojiang_mahjong` t left join `venue` v on t.`venue_id` = v.`id` "
+					"where t.`venue_id` = \"" + _venueId + "\"";
 				return QueryType::Select;
 			}
 
@@ -39,6 +43,9 @@ namespace NiuMa
 					_number = res->getString("number");
 					_level = res->getInt("level");
 					_ruleConfig = res->getString("rule_config");
+					// district_id 可能为 NULL（好友房），NULL 时返回0
+					auto did = res->getInt64("district_id");
+					_districtId = (did == 0 || res->wasNull()) ? 0 : static_cast<int>(did);
 					rows++;
 				}
 				return rows;
@@ -55,6 +62,9 @@ namespace NiuMa
 
 			// 玩法配置JSON
 			std::string _ruleConfig;
+
+			// 区域ID（0表示好友房，不参与区域匹配）
+			int _districtId;
 		};
 		std::shared_ptr<LoadTask> task = std::make_shared<LoadTask>(id);
 		MysqlPool::getSingleton().syncQuery(task);
@@ -63,7 +73,7 @@ namespace NiuMa
 			return nullptr;
 		}
 		std::shared_ptr<TaoJiangMahjongRoom> room = std::make_shared<TaoJiangMahjongRoom>(
-			id, task->_number, task->_level, task->_ruleConfig);
+			id, task->_number, task->_level, task->_ruleConfig, task->_districtId);
 		return room;
 	}
 }

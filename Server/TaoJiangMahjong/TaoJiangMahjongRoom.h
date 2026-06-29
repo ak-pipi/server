@@ -19,19 +19,20 @@ namespace NiuMa
 	class TaoJiangMahjongRoom : public MahjongRoom
 	{
 	public:
-		TaoJiangMahjongRoom(const std::string& venueId, const std::string& number, int level, const std::string& ruleConfig);
+		TaoJiangMahjongRoom(const std::string& venueId, const std::string& number, int level, const std::string& ruleConfig, int districtId = 0);
 		virtual ~TaoJiangMahjongRoom();
 
 	public:
 		virtual bool onMessage(const NetMessage::Ptr& netMsg) override;
 		virtual void onTimer() override;
 
-		// 重写
+	// 重写
 	protected:
 		virtual GameAvatar::Ptr createAvatar(const std::string& playerId, int seat, bool robot) const override;
 		virtual bool checkEnter(const std::string& playerId, std::string& errMsg, bool robot = false) const override;
 		virtual int checkLeave(const std::string& playerId, std::string& errMsg) const override;
 		virtual void getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const override;
+		virtual void onAvatarJoined(int seat, const std::string& playerId) override;
 		virtual void onAvatarLeaved(int seat, const std::string& playerId) override;
 		virtual void clean() override;
 		virtual double* getDistances() override;
@@ -98,6 +99,16 @@ namespace NiuMa
 		virtual void dealTiles() override;
 
 		/**
+		 * 重写摸牌，在摸牌后更新听牌提示
+		 */
+		virtual bool fetchTile(bool bBack = false) override;
+
+		/**
+		 * 重写点炮判断：桃江麻将平胡不能抓炮，只有大胡才能吃炮
+		 */
+		virtual bool shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const MahjongTile& mt) const override;
+
+		/**
 		 * 重写胡牌检测，添加天天胡和地胡检测（桃江麻将特有规则）
 		 */
 		virtual void doHu() override;
@@ -130,6 +141,12 @@ namespace NiuMa
 		 */
 		void saveRoundRecord();
 
+		/**
+		 * 获取区域ID
+		 * @return 区域ID，0表示好友房
+		 */
+		int getDistrictId() const;
+
 	private:
 		/**
 		 * 房间编号，用于手动输入进入房间
@@ -140,6 +157,11 @@ namespace NiuMa
 		 * 等级
 		 */
 		const int _level;
+
+		/**
+		 * 区域ID（0表示好友房，不参与区域匹配）
+		 */
+		const int _districtId;
 
 		/**
 		 * 牌局状态

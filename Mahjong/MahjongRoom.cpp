@@ -535,9 +535,14 @@ namespace NiuMa
 		return false;
 	}
 
-	bool MahjongRoom::canDianPao() const {
-		return _dianPao;
-	}
+bool MahjongRoom::canDianPao() const {
+	return _dianPao;
+}
+
+bool MahjongRoom::shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const MahjongTile& mt) const {
+	// 默认允许点炮，子类可覆写（如桃江麻将平胡不能抓炮）
+	return true;
+}
 
 	bool MahjongRoom::executeHu() {
 		if (_acOps2[0].empty())
@@ -759,6 +764,9 @@ namespace NiuMa
 				pAvatar = dynamic_cast<MahjongAvatar*>(getAvatar(i).get());
 				if (!(pAvatar->canHu(mt)))
 					continue;
+				// 桃江麻将等规则：平胡不能抓炮（包括抢杠）
+				if (!shouldAllowDianPaoForAvatar(pAvatar, mt))
+					continue;
 
 				_waitingQiangGang = true;
 				tmp = _acOpIdAlloc.askForId();
@@ -928,6 +936,8 @@ namespace NiuMa
 			}
 		}
 		if (pAvatar->hasActionOption()) {
+			// 有ZiMo/杠等选项 → 通知客户端（修复：摸牌后有ZiMo选项但未通知客户端导致无胡牌提示）
+			notifyActionOptions(pAvatar);
 			// 进入等待动作选项状态
 			changeState(StateMachine::Action);
 		} else {
@@ -1000,7 +1010,7 @@ namespace NiuMa
 			if (pAvatar == nullptr)
 				continue;
 			passed.clear();
-			if (canDianPao() && pAvatar->canHu(mt) && pAvatar->canDianPao(mt, passed)) {
+			if (canDianPao() && pAvatar->canHu(mt) && pAvatar->canDianPao(mt, passed) && shouldAllowDianPaoForAvatar(pAvatar, mt)) {
 				tmp = _acOpIdAlloc.askForId();
 				if (tmp >= ACTION_OPTION_POOL_SIZE) {
 					LOG_ERROR("逻辑错误，动作id大于动作选项池大小");
