@@ -936,9 +936,18 @@ bool MahjongRoom::shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const Mahj
 			}
 		}
 		if (pAvatar->hasActionOption()) {
-			// 有ZiMo/杠等选项 → 通知客户端（修复：摸牌后有ZiMo选项但未通知客户端导致无胡牌提示）
+			// 有ZiMo/杠等选项 → 同时也添加出牌选项，通知客户端并进入等待动作选项状态
+			id = _acOpIdAlloc.askForId();
+			if (id >= ACTION_OPTION_POOL_SIZE) {
+				LOG_ERROR("逻辑错误，动作id大于动作选项池大小");
+				return;
+			}
+			_acOpPool[id].setType(MahjongAction::Type::Play);
+			_acOpPool[id].setId(id);
+			_acOpPool[id].setPlayer(_actor);
+			pAvatar->addActionOption(id);
+
 			notifyActionOptions(pAvatar);
-			// 进入等待动作选项状态
 			changeState(StateMachine::Action);
 		} else {
 			// 通知玩家出牌
@@ -954,8 +963,8 @@ bool MahjongRoom::shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const Mahj
 
 			// 进入等待出牌状态
 			changeState(StateMachine::Play);
+			notifyActionOptions(pAvatar);
 		}
-		notifyActionOptions(pAvatar);
 	}
 
 	bool MahjongRoom::executePlay(int tileId) {
