@@ -230,6 +230,62 @@ namespace NiuMa
 
 		MSGPACK_DEFINE_MAP(disbander, elapsed, choices);
 	};
+
+	/**
+	 * 通知报听消息
+	 * 服务器->客户端
+	 */
+	class MsgTJBaoTing : public MsgBase
+	{
+	public:
+		MsgTJBaoTing();
+		virtual ~MsgTJBaoTing();
+
+		static const std::string TYPE;
+
+		virtual const std::string& getType() const {
+			return TYPE;
+		}
+
+		MSG_PACK_IMPL
+
+	public:
+		// 报听玩家座位号
+		int seat;
+
+		MSGPACK_DEFINE_MAP(seat);
+	};
+
+	/**
+	 * 通知杠翻出的3张牌消息
+	 * 服务器->客户端
+	 */
+	class MsgTJGangReveal : public MsgBase
+	{
+	public:
+		MsgTJGangReveal();
+		virtual ~MsgTJGangReveal();
+
+		static const std::string TYPE;
+
+		virtual const std::string& getType() const {
+			return TYPE;
+		}
+
+		MSG_PACK_IMPL
+
+	public:
+		// 开杠玩家座位号
+		int seat;
+
+		// 翻出的3张牌
+		MahjongTileArray tiles;
+
+		// 实际翻出的牌数（0~3）
+		int count;
+
+		MSGPACK_DEFINE_MAP(seat, tiles, count);
+	};
 }
 
 #endif // !_NIU_MA_TAOJIANG_MAHJONG_MESSAGES_H_

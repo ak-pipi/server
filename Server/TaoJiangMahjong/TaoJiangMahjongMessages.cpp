@@ -71,6 +71,23 @@ namespace NiuMa
 
 	MsgTJDisbandVote::~MsgTJDisbandVote() {}
 
+	const std::string MsgTJBaoTing::TYPE("MsgTJBaoTing");
+
+	MsgTJBaoTing::MsgTJBaoTing()
+		: seat(0)
+	{}
+
+	MsgTJBaoTing::~MsgTJBaoTing() {}
+
+	const std::string MsgTJGangReveal::TYPE("MsgTJGangReveal");
+
+	MsgTJGangReveal::MsgTJGangReveal()
+		: seat(0)
+		, count(0)
+	{}
+
+	MsgTJGangReveal::~MsgTJGangReveal() {}
+
 	void TaoJiangMahjongMessages::registMessages() {
 		IMsgCreator::Ptr creator = IMsgCreator::Ptr(new MsgCreator<MsgTJSync>());
 		MessageManager::getSingleton().registCreator(MsgTJSync::TYPE, creator);

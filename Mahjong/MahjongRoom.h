@@ -95,8 +95,9 @@ namespace NiuMa
 		 */
 		void doActionOption(const std::string& playerId, int actionId, int tileId);
 
-		// 玩家不选择任何动作选项，即选择“过”
-		void passActionOption(const std::string& playerId);
+		// 玩家不选择任何动作选项，即选择"过"
+		// 玩家放弃动作选项（子类可覆写以实现特殊抢杠流程）
+		virtual void passActionOption(const std::string& playerId);
 
 		// 自动执行动作选项(用于AI出牌)，参数bOnlyAuto表示本次调用是否仅针对自动出牌玩家
 		void autoActionOption(bool bOnlyAuto);
@@ -104,10 +105,10 @@ namespace NiuMa
 		// 玩家指定下一次摸起的牌(仅用于测试麻将相关算法的正确性)
 		void doNextTile(const std::string& playerId, const std::string& str);
 
-		// 更新当前执行动作的玩家索引
+	protected:
+		// 更新当前执行动作的玩家索引（无参数版本，轮转到下家）
 		void updateCurrentActor();
-
-		// 状态跳转
+		// 状态跳转（子类可覆写杠流程时需要使用）
 		void changeState(StateMachine eNewState);
 
 		// 情况所有玩家的所有动作选项
@@ -122,8 +123,8 @@ namespace NiuMa
 		// 执行胡动作
 		bool executeHu();
 
-		// 执行杠动作
-		bool executeGang();
+		// 执行杠动作（子类可覆写以实现特殊杠规则）
+		virtual bool executeGang();
 
 		// 执行碰动作
 		bool executePeng();
@@ -134,8 +135,8 @@ namespace NiuMa
 		// 执行出牌动作
 		bool executePlay(int tileId);
 
-		// 在摸牌、吃牌、碰牌之后通知出牌或者杠(加杠及暗杠)
-		void afterFetchChiPeng(MahjongAvatar* pAvatar, int fetchedId = -1);
+		// 在摸牌、吃牌、碰牌之后通知出牌或者杠(加杠及暗杠)（子类可覆写以添加听牌才能开杠等限制）
+		virtual void afterFetchChiPeng(MahjongAvatar* pAvatar, int fetchedId = -1);
 
 		// 流局处理
 		void noMoreTile();

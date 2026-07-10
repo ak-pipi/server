@@ -97,6 +97,9 @@ namespace NiuMa
 		// 过胡(过点炮动作才调用此函数，过自摸不可调用此函数)
 		virtual void passDianPao(const MahjongTile& mt);
 
+		// 清除过胡限制，手牌结构变化后可重新胡牌
+		void clearPassedHu();
+
 		// 过碰
 		virtual void passPeng(const MahjongTile& mt);
 
@@ -133,6 +136,7 @@ namespace NiuMa
 		void addFangPao();
 		void addHuTimes();
 		void addHuWay(MahjongGenre::HuWay eWay);
+		void removeHuWay(MahjongGenre::HuWay eWay);
 		unsigned int getHuStyle() const;
 		unsigned int getHuStyleEx() const;
 		unsigned int getHuWay() const;

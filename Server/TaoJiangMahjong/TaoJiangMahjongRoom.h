@@ -1,4 +1,4 @@
-﻿// TaoJiangMahjongRoom.h
+// TaoJiangMahjongRoom.h
 
 #ifndef _NIU_MA_TAOJIANG_MAHJONG_ROOM_H_
 #define _NIU_MA_TAOJIANG_MAHJONG_ROOM_H_
@@ -11,6 +11,8 @@
 
 namespace NiuMa
 {
+	class TaoJiangMahjongAvatar;
+
 	/**
 	 * 桃江麻将游戏房
 	 * 地方2人麻将，支持好友房、匹配房、练习房
@@ -41,6 +43,21 @@ namespace NiuMa
 		virtual void calcHuScore() const override;
 		virtual void doJieSuan() override;
 		virtual void afterHu() override;
+
+		/**
+		 * 重写杠动作：桃江麻将杠后翻3张牌
+		 */
+		virtual bool executeGang() override;
+
+		/**
+		 * 重写放弃动作选项：桃江麻将杠后流程
+		 */
+		virtual void passActionOption(const std::string& playerId) override;
+
+		/**
+		 * 重写摸牌/吃/碰后出杠：桃江麻将需听牌才能开杠
+		 */
+		virtual void afterFetchChiPeng(MahjongAvatar* pAvatar, int fetchedId = -1) override;
 
 	private:
 		/**
@@ -99,7 +116,7 @@ namespace NiuMa
 		virtual void dealTiles() override;
 
 		/**
-		 * 重写摸牌，在摸牌后更新听牌提示
+		 * 重写摸牌，补充赖子万能牌的直接胡牌兜底检测
 		 */
 		virtual bool fetchTile(bool bBack = false) override;
 
@@ -109,9 +126,84 @@ namespace NiuMa
 		virtual bool shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const MahjongTile& mt) const override;
 
 		/**
-		 * 重写胡牌检测，添加天天胡和地胡检测（桃江麻将特有规则）
+		 * 重写胡牌检测，添加天胡/天天胡/地胡检测（桃江麻将特有规则）
 		 */
 		virtual void doHu() override;
+
+		/**
+		 * 统计玩家手牌中明子牌的数量（用于天胡/天天胡/地胡检测）
+		 */
+		int countMingZiInHand(MahjongAvatar* pAvatar) const;
+
+		/**
+		 * 统计玩家手牌中赖子牌的数量（用于天胡/天天胡检测）
+		 */
+		int countLaiZiInHand(MahjongAvatar* pAvatar) const;
+
+		/**
+		 * 判断胡牌是否为硬庄：存在一种不把赖子当万能牌的胡牌拆法，或完全没有赖子
+		 */
+		bool isYingZhuangHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool zimo) const;
+
+		/**
+		 * 黑天胡：首轮自摸、无刻子、无自然顺子、无任意2/5/8、无赖子
+		 */
+		bool isHeiTianHu(TaoJiangMahjongAvatar* avatar) const;
+
+		/**
+		 * 按桃江规则估算某次胡牌是否具备可点炮的大胡
+		 */
+		bool hasDianPaoDaHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& mt) const;
+
+		/**
+		 * 按当前手牌实时判断某张候选牌是否可胡，并补齐听牌缓存
+		 */
+		bool canHuWithCandidate(MahjongAvatar* avatar, const MahjongTile& mt, bool tileAlreadyInHand) const;
+
+		/**
+		 * 确保候选胡牌进入听牌缓存，避免多轮换听后动作生成依赖旧缓存
+		 */
+		void ensureTingTile(MahjongAvatar* avatar, const MahjongTile& mt, MahjongGenre::HuStyle style) const;
+
+		/**
+		 * 根据大胡数量计算单份胡分（不含台桌分，台桌分在债务清算中乘）
+		 */
+		int calcBaseHuScore(int daHuCount) const;
+
+		/**
+		 * 抢杠胡按开杠者可杠上花的分数计分
+		 */
+		int calcQiangGangHuScore(const MahjongTile& huTile) const;
+
+		/**
+		 * 报听后、或开杠后再杠，必须保持听口不变
+		 */
+		bool shouldKeepTingForGang(TaoJiangMahjongAvatar* avatar, const MahjongTile& gangTile, MahjongAction::Type gangType) const;
+
+		/**
+		 * 比较两组听牌牌面是否一致
+		 */
+		bool sameTingTiles(const MahjongGenre::TingPaiArray& a, const MahjongGenre::TingPaiArray& b) const;
+
+		/**
+		 * 杠后翻3张牌处理：开杠者优先胡，否则对手可抢杠，都不胡则进弃牌池
+		 */
+		void processGangReveal(MahjongAvatar* gangPlayer, MahjongAction::Type gangType, const MahjongTile& gangTile);
+
+		/**
+		 * 为对手添加抢杠/抢翻牌胡动作
+		 */
+		bool addQiangGangOptions(MahjongAvatar* gangPlayer, const MahjongTileArray& candidateTiles);
+
+		/**
+		 * 杠后无人胡时，翻牌进入弃牌池并切到对家摸牌
+		 */
+		void finishGangRevealWithoutHu(MahjongAvatar* gangPlayer);
+
+		/**
+		 * 通知杠翻出的3张牌
+		 */
+		void notifyGangReveal(MahjongAvatar* gangPlayer, const MahjongTile& mt1, const MahjongTile& mt2, const MahjongTile& mt3);
 
 		/**
 		 * 通知发起解散投票
@@ -303,6 +395,28 @@ namespace NiuMa
 		 * 报听是否可用（true=开启报听功能）
 		 */
 		bool _baoTingEnabled;
+
+		// ---- 杠后翻牌系统 ----
+
+		/**
+		 * 杠后翻出的3张牌
+		 */
+		MahjongTile _gangRevealedTiles[3];
+
+		/**
+		 * 杠后翻出的牌数量（0~3）
+		 */
+		int _gangRevealedCount;
+
+		/**
+		 * 当前杠操作的类型（用于passActionOption判断）
+		 */
+		MahjongAction::Type _lastGangType;
+
+		/**
+		 * 当前杠操作的牌id（用于明杠本身牌可抢）
+		 */
+		int _lastGangTileId;
 	};
 }
 

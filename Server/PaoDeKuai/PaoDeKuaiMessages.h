@@ -89,8 +89,30 @@ namespace NiuMa
 		// 玩家数量
 		int playerCount;
 
+		// 房间号
+		std::string number;
+
+		// 房间等级
+		int level;
+
+		// 底注
+		int baseScore;
+
+		// 总局数
+		int roundCount;
+
+		// 炸弹数量
+		int bombCount;
+
+		// 当前倍数
+		int multiplier;
+
+		// 各玩家剩余手牌数量
+		int remainCounts[2];
+
 		MSGPACK_DEFINE_MAP(gameState, currentPlayer, mySeat, myCards, lastPlayCards,
-			lastPlaySeat, lastPlayGenre, isFirstPlay, roundNo, banker, playerCount);
+			lastPlaySeat, lastPlayGenre, isFirstPlay, roundNo, banker, playerCount,
+			number, level, baseScore, roundCount, bombCount, multiplier, remainCounts);
 	};
 
 	/**
@@ -141,7 +163,13 @@ namespace NiuMa
 		// 庄家座位号
 		int banker;
 
-		MSGPACK_DEFINE_MAP(cards, firstPlayer, roundNo, banker);
+		// 总局数
+		int roundCount;
+
+		// 底注
+		int baseScore;
+
+		MSGPACK_DEFINE_MAP(cards, firstPlayer, roundNo, banker, roundCount, baseScore);
 	};
 
 	/**
@@ -196,7 +224,13 @@ namespace NiuMa
 		// 下一个出牌玩家座位号
 		int nextPlayer;
 
-		MSGPACK_DEFINE_MAP(seat, cardIds, genre, nextPlayer);
+		// 出牌玩家剩余手牌数量
+		int remainCount;
+
+		// 当前倍数
+		int multiplier;
+
+		MSGPACK_DEFINE_MAP(seat, cardIds, genre, nextPlayer, remainCount, multiplier);
 	};
 
 	/**
@@ -252,7 +286,20 @@ namespace NiuMa
 		// 各玩家剩余手牌
 		std::vector<int> remainCards[2];
 
-		MSGPACK_DEFINE_MAP(winnerSeat, scores, winGolds, remainCards);
+		// 底注
+		int baseScore;
+
+		// 炸弹数量
+		int bombCount;
+
+		// 结算倍数
+		int multiplier;
+
+		// 是否关门/春天
+		bool spring;
+
+		MSGPACK_DEFINE_MAP(winnerSeat, scores, winGolds, remainCards,
+			baseScore, bombCount, multiplier, spring);
 	};
 }
 

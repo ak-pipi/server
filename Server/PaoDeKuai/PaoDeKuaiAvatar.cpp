@@ -3,6 +3,8 @@
 #include "PaoDeKuaiAvatar.h"
 #include "PokerCombination.h"
 
+#include <unordered_set>
+
 namespace NiuMa
 {
 	PaoDeKuaiAvatar::PaoDeKuaiAvatar(const PokerRule::Ptr& rule, const std::string& playerId, int seat, bool robot)
@@ -112,7 +114,6 @@ namespace NiuMa
 	}
 
 	void PaoDeKuaiAvatar::combineStraight() {
-		int pointNums = _rule->getPointNums();
 		// 2和王者不参与顺子，所以最大到A(order=11)
 		int maxOrder = 11; // A
 		for (int start = 0; start <= maxOrder; start++) {
@@ -170,7 +171,6 @@ namespace NiuMa
 
 	void PaoDeKuaiAvatar::combineTriple() {
 		int pointNums = _rule->getPointNums();
-		int maxOrder = 11;
 		for (int o = 0; o < pointNums; o++) {
 			if (_pointOrderNums[o] < 3)
 				continue;
@@ -255,26 +255,60 @@ namespace NiuMa
 
 				// 飞机带单
 				{
-					PokerCombination::Ptr comb = allocateCombination();
-					comb->setGenre(static_cast<int>(PaoDeKuaiGenre::PlaneOne));
-					comb->setOfficerPoint(tripleOrders[i + len - 1]);
-					comb->addCards(tripleIds); // 简化：不带副牌的组合也让其能出
-					insertCombination(comb);
+					std::vector<int> ids = tripleIds;
+					std::unordered_set<int> used(ids.begin(), ids.end());
+					for (int o = 0; o < pointNums && static_cast<int>(ids.size()) < planeLen * 4; o++) {
+						for (int id : _pointOrderCards[o]) {
+							if (used.find(id) != used.end())
+								continue;
+							ids.push_back(id);
+							used.insert(id);
+							break;
+						}
+					}
+					if (static_cast<int>(ids.size()) == planeLen * 4) {
+						PokerCombination::Ptr comb = allocateCombination();
+						comb->setGenre(static_cast<int>(PaoDeKuaiGenre::PlaneOne));
+						comb->setOfficerPoint(tripleOrders[i + len - 1]);
+						comb->addCards(ids);
+						insertCombination(comb);
+					}
 				}
 
 				// 飞机带对
 				{
-					PokerCombination::Ptr comb = allocateCombination();
-					comb->setGenre(static_cast<int>(PaoDeKuaiGenre::PlanePair));
-					comb->setOfficerPoint(tripleOrders[i + len - 1]);
-					comb->addCards(tripleIds);
-					insertCombination(comb);
+					std::vector<int> ids = tripleIds;
+					std::unordered_set<int> used(ids.begin(), ids.end());
+					for (int o = 0; o < pointNums && static_cast<int>(ids.size()) < planeLen * 5; o++) {
+						std::vector<int> pairIds;
+						for (int id : _pointOrderCards[o]) {
+							if (used.find(id) != used.end())
+								continue;
+							pairIds.push_back(id);
+							if (pairIds.size() == 2)
+								break;
+						}
+						if (pairIds.size() == 2) {
+							ids.push_back(pairIds[0]);
+							ids.push_back(pairIds[1]);
+							used.insert(pairIds[0]);
+							used.insert(pairIds[1]);
+						}
+					}
+					if (static_cast<int>(ids.size()) == planeLen * 5) {
+						PokerCombination::Ptr comb = allocateCombination();
+						comb->setGenre(static_cast<int>(PaoDeKuaiGenre::PlanePair));
+						comb->setOfficerPoint(tripleOrders[i + len - 1]);
+						comb->addCards(ids);
+						insertCombination(comb);
+					}
 				}
 			}
 		}
 	}
 
 	void PaoDeKuaiAvatar::candidateCombinationsImpl(int situation) {
+		(void)situation;
 		// 首位出牌：出最小牌型的组合
 		for (auto& kv : _combinations) {
 			for (auto& comb : kv.second) {
@@ -284,6 +318,7 @@ namespace NiuMa
 	}
 
 	void PaoDeKuaiAvatar::candidateCombinationsImpl(const PokerGenre& pg, int situation) {
+		(void)situation;
 		// 压牌：找出所有能大过当前牌型的组合
 		int targetGenre = pg.getGenre();
 		for (auto& kv : _combinations) {

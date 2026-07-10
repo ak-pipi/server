@@ -1,0 +1,599 @@
+﻿// DouDiZhuRoom.cpp
+
+#include "DouDiZhuRoom.h"
+#include "DouDiZhuMessages.h"
+#include "GameDefines.h"
+#include "Game/WalletEventTask.h"
+#include "Network/MsgSession.h"
+#include "Base/Log.h"
+
+#include <algorithm>
+#include <chrono>
+#include <sstream>
+
+namespace NiuMa
+{
+	DouDiZhuRoom::DouDiZhuRoom(const std::shared_ptr<DouDiZhuGameRule>& rule,
+		const std::string& venueId,
+		const std::string& number,
+		int level,
+		const std::string& ruleConfig)
+		: GameRoom(venueId, static_cast<int>(GameType::DouDiZhu), 2)
+		, _rule(rule)
+		, _dealer(rule)
+		, _ruleConfig(ruleConfig)
+		, _number(number)
+		, _level(level)
+		, _gameState(GameState::None)
+		, _stateTime(0)
+		, _roundNo(0)
+		, _banker(0)
+		, _currentPlayer(-1)
+		, _landlordSeat(-1)
+		, _callStarter(0)
+		, _callTurn(-1)
+		, _highestBidSeat(-1)
+		, _highestBid(0)
+		, _callCount(0)
+		, _multiplier(1)
+		, _spring(false)
+		, _lastPlaySeat(-1)
+		, _isFirstPlay(true)
+		, _autoActionTime(0)
+	{
+		_playCounts[0] = 0;
+		_playCounts[1] = 0;
+		_rule->loadConfig(ruleConfig);
+	}
+
+	DouDiZhuRoom::~DouDiZhuRoom() {}
+
+	GameAvatar::Ptr DouDiZhuRoom::createAvatar(const std::string& playerId, int seat, bool robot) const {
+		return std::make_shared<DouDiZhuAvatar>(_rule, playerId, seat, robot);
+	}
+
+	bool DouDiZhuRoom::checkEnter(const std::string& playerId, std::string& errMsg, bool robot) const {
+		(void)playerId;
+		(void)robot;
+		if (getAvatarCount() >= _rule->getPlayerCount()) {
+			errMsg = "房间已满";
+			return false;
+		}
+		return true;
+	}
+
+	int DouDiZhuRoom::checkLeave(const std::string& playerId, std::string& errMsg) const {
+		(void)playerId;
+		if (_gameState == GameState::Bidding || _gameState == GameState::Playing) {
+			errMsg = "游戏进行中，无法离开";
+			return 2;
+		}
+		return 0;
+	}
+
+	void DouDiZhuRoom::onAvatarLeaved(int seat, const std::string& playerId) {
+		(void)seat;
+		(void)playerId;
+		if (getAvatarCount() == 0)
+			setState(GameState::None);
+	}
+
+	void DouDiZhuRoom::clean() {
+		_gameState = GameState::None;
+		_roundNo = 0;
+		_currentPlayer = -1;
+		_landlordSeat = -1;
+		_callTurn = -1;
+		_highestBidSeat = -1;
+		_highestBid = 0;
+		_callCount = 0;
+		_multiplier = 1;
+		_playCounts[0] = 0;
+		_playCounts[1] = 0;
+		_spring = false;
+		_lastPlaySeat = -1;
+		_isFirstPlay = true;
+		_lastPlayGenre.clear();
+		_bottomCards.clear();
+		_discardedCards.clear();
+		for (int i = 0; i < 2; i++) {
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			if (avatar)
+				avatar->clear();
+		}
+	}
+
+	void DouDiZhuRoom::onTimer() {
+		if (_gameState != GameState::Bidding && _gameState != GameState::Playing)
+			return;
+		time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		if (_autoActionTime > 0 && now >= _autoActionTime) {
+			_autoActionTime = 0;
+			autoAction();
+		}
+	}
+
+	bool DouDiZhuRoom::onMessage(const NetMessage::Ptr& netMsg) {
+		const std::string& type = netMsg->getType();
+		if (type == MsgDouDiZhuSync::TYPE) {
+			onSyncTable(netMsg);
+			return true;
+		}
+		if (type == MsgDouDiZhuReady::TYPE || type == MsgPlayerReady::TYPE) {
+			onReady(netMsg);
+			return true;
+		}
+		if (type == MsgDouDiZhuCall::TYPE) {
+			onCall(netMsg);
+			return true;
+		}
+		if (type == MsgDouDiZhuPlay::TYPE) {
+			onPlay(netMsg);
+			return true;
+		}
+		return GameRoom::onMessage(netMsg);
+	}
+
+	std::shared_ptr<DouDiZhuAvatar> DouDiZhuRoom::getAvatar(int seat) const {
+		return std::dynamic_pointer_cast<DouDiZhuAvatar>(GameRoom::getAvatar(seat));
+	}
+
+	void DouDiZhuRoom::setState(GameState state) {
+		_gameState = state;
+		_stateTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		switch (state) {
+		case GameState::None:
+			setRoomState(RoomState::Waiting);
+			break;
+		case GameState::Ready:
+			setRoomState(RoomState::Ready);
+			break;
+		case GameState::Bidding:
+		case GameState::Playing:
+			setRoomState(RoomState::Playing);
+			break;
+		case GameState::Settling:
+			setRoomState(RoomState::Settling);
+			break;
+		}
+	}
+
+	bool DouDiZhuRoom::allReady() const {
+		if (getAvatarCount() < _rule->getPlayerCount())
+			return false;
+		for (int i = 0; i < 2; i++) {
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			if (!avatar || !avatar->isReady())
+				return false;
+		}
+		return true;
+	}
+
+	int DouDiZhuRoom::getNextSeat(int seat) const {
+		return (seat + 1) % _rule->getPlayerCount();
+	}
+
+	int DouDiZhuRoom::findSeatByPlayer(const std::string& playerId) const {
+		for (int i = 0; i < 2; i++) {
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			if (avatar && avatar->getPlayerId() == playerId)
+				return i;
+		}
+		return -1;
+	}
+
+	void DouDiZhuRoom::fillHandCounts(int counts[2]) const {
+		for (int i = 0; i < 2; i++) {
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			counts[i] = avatar ? avatar->getCardNums() : 0;
+		}
+	}
+
+	void DouDiZhuRoom::fillCardIds(const CardArray& cards, std::vector<int>& ids) const {
+		ids.clear();
+		for (const PokerCard& c : cards)
+			ids.push_back(c.getId());
+	}
+
+	void DouDiZhuRoom::startRound() {
+		_roundNo++;
+		_currentPlayer = -1;
+		_landlordSeat = -1;
+		_callStarter = (_roundNo - 1) % _rule->getPlayerCount();
+		_callTurn = _callStarter;
+		_highestBidSeat = -1;
+		_highestBid = 0;
+		_callCount = 0;
+		_multiplier = 1;
+		_playCounts[0] = 0;
+		_playCounts[1] = 0;
+		_spring = false;
+		_lastPlaySeat = -1;
+		_isFirstPlay = true;
+		_lastPlayGenre.clear();
+		_bottomCards.clear();
+		_discardedCards.clear();
+
+		for (int i = 0; i < 2; i++) {
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			if (avatar) {
+				avatar->clear();
+				avatar->setRoundScore(0);
+				avatar->setWinGold(0);
+			}
+		}
+		_dealer.shuffle();
+		dealCards();
+		setState(GameState::Bidding);
+		for (int i = 0; i < 2; i++) {
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			if (avatar)
+				notifyDeal(avatar->getPlayerId());
+		}
+		_autoActionTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) +
+			_rule->getCallTimeout() / 1000;
+		InfoS << "斗地主开始叫地主，场地: " << getId() << "，局号: " << _roundNo;
+	}
+
+	void DouDiZhuRoom::dealCards() {
+		for (int i = 0; i < 2; i++) {
+			CardArray cards;
+			_dealer.handOutCards(cards, _rule->getHandCardCount());
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			if (avatar) {
+				avatar->setCards(cards);
+				avatar->sortCards();
+			}
+		}
+		_dealer.handOutCards(_bottomCards, _rule->getBottomCardCount());
+		_dealer.handOutCards(_discardedCards, _dealer.getCardLeft());
+	}
+
+	DouDiZhuRoom::CallResult DouDiZhuRoom::doCall(int seat, int score) {
+		if (_gameState != GameState::Bidding || seat != _callTurn)
+			return CallResult::NotYourTurn;
+		if (score < 0 || score > 3)
+			return CallResult::InvalidScore;
+		if (score > 0 && score <= _highestBid)
+			return CallResult::InvalidScore;
+
+		if (score > 0) {
+			_highestBid = score;
+			_highestBidSeat = seat;
+		}
+		_callCount++;
+		int nextSeat = -1;
+		if (score == 3) {
+			notifyCall(seat, score, -1);
+			finishBidding(seat, score);
+			return CallResult::OK;
+		}
+		if (_callCount >= _rule->getPlayerCount()) {
+			notifyCall(seat, score, -1);
+			if (_highestBidSeat >= 0)
+				finishBidding(_highestBidSeat, _highestBid);
+			else
+				startRound();
+			return CallResult::OK;
+		}
+		nextSeat = getNextSeat(seat);
+		_callTurn = nextSeat;
+		notifyCall(seat, score, nextSeat);
+		_autoActionTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) +
+			_rule->getCallTimeout() / 1000;
+		return CallResult::OK;
+	}
+
+	void DouDiZhuRoom::finishBidding(int landlordSeat, int score) {
+		_landlordSeat = landlordSeat;
+		_banker = landlordSeat;
+		_multiplier = std::max(1, score);
+		std::shared_ptr<DouDiZhuAvatar> landlord = getAvatar(landlordSeat);
+		if (landlord) {
+			landlord->setLandlord(true);
+			for (const PokerCard& c : _bottomCards)
+				landlord->addCard(c);
+			landlord->sortCards();
+		}
+		_currentPlayer = landlordSeat;
+		_lastPlaySeat = -1;
+		_isFirstPlay = true;
+		_lastPlayGenre.clear();
+		setState(GameState::Playing);
+		notifyLandlord();
+		_autoActionTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) +
+			_rule->getAutoPlayTimeout() / 1000;
+	}
+
+	DouDiZhuRoom::PlayResult DouDiZhuRoom::validatePlay(int seat, const std::vector<int>& cardIds, PokerGenre& genre) const {
+		if (_gameState != GameState::Playing || seat != _currentPlayer)
+			return PlayResult::NotYourTurn;
+		if (cardIds.empty()) {
+			if (_isFirstPlay)
+				return PlayResult::CannotPass;
+			return PlayResult::OK;
+		}
+		std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(seat);
+		if (!avatar)
+			return PlayResult::InvalidCards;
+		CardArray cards;
+		if (!avatar->getCardsByIds(cardIds, cards))
+			return PlayResult::InvalidCards;
+		std::sort(cards.begin(), cards.end(), CardComparator(_rule));
+		genre.setCards(cards, _rule);
+		if (genre.getGenre() == static_cast<int>(DouDiZhuGenre::Invalid))
+			return PlayResult::InvalidGenre;
+		if (!_isFirstPlay) {
+			int cmp = _rule->compareGenre(genre, _lastPlayGenre);
+			if (cmp != 1)
+				return PlayResult::CannotBeat;
+		}
+		return PlayResult::OK;
+	}
+
+	DouDiZhuRoom::PlayResult DouDiZhuRoom::doPlay(int seat, const std::vector<int>& cardIds) {
+		PokerGenre genre;
+		PlayResult result = validatePlay(seat, cardIds, genre);
+		if (result != PlayResult::OK)
+			return result;
+		if (cardIds.empty()) {
+			advanceTurn();
+			notifyPlay(seat, cardIds, 0, _currentPlayer);
+			return PlayResult::OK;
+		}
+		std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(seat);
+		if (!avatar)
+			return PlayResult::InvalidCards;
+		avatar->removeCardsByIds(cardIds);
+		avatar->setOuttedGenre(genre);
+		_playCounts[seat]++;
+		_lastPlaySeat = seat;
+		_lastPlayGenre = genre;
+		_isFirstPlay = false;
+		if (genre.getGenre() == static_cast<int>(DouDiZhuGenre::Bomb) ||
+			genre.getGenre() == static_cast<int>(DouDiZhuGenre::Rocket))
+			_multiplier *= 2;
+		if (avatar->isFinished()) {
+			notifyPlay(seat, cardIds, genre.getGenre(), -1);
+			settle(seat);
+			return PlayResult::OK;
+		}
+		advanceTurn();
+		notifyPlay(seat, cardIds, genre.getGenre(), _currentPlayer);
+		return PlayResult::OK;
+	}
+
+	void DouDiZhuRoom::advanceTurn() {
+		_currentPlayer = getNextSeat(_currentPlayer);
+		if (_currentPlayer == _lastPlaySeat) {
+			_isFirstPlay = true;
+			_lastPlaySeat = -1;
+			_lastPlayGenre.clear();
+		}
+		_autoActionTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) +
+			_rule->getAutoPlayTimeout() / 1000;
+	}
+
+	void DouDiZhuRoom::settle(int winnerSeat) {
+		setState(GameState::Settling);
+		int farmerSeat = getNextSeat(_landlordSeat);
+		if (winnerSeat == _landlordSeat && _playCounts[farmerSeat] == 0)
+			_spring = true;
+		else if (winnerSeat != _landlordSeat && _playCounts[_landlordSeat] <= 1)
+			_spring = true;
+		if (_spring)
+			_multiplier *= 2;
+		calculateScores(winnerSeat);
+		notifySettlement(winnerSeat);
+		for (int i = 0; i < 2; i++) {
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			if (!avatar)
+				continue;
+			int64_t winGold = avatar->getWinGold();
+			if (winGold > 0)
+				WalletEventTask::publish(avatar->getPlayerId(), "GAME_WIN", winGold, "DouDiZhu", getId(), "斗地主赢得金币");
+			else if (winGold < 0)
+				WalletEventTask::publish(avatar->getPlayerId(), "GAME_LOSE", -winGold, "DouDiZhu", getId(), "斗地主输掉金币");
+			avatar->setReady(false);
+		}
+		_banker = winnerSeat;
+		setState(GameState::Ready);
+	}
+
+	void DouDiZhuRoom::calculateScores(int winnerSeat) {
+		int score = _rule->getBaseScore() * std::max(1, _highestBid) * std::max(1, _multiplier);
+		if (_rule->getMaxRoundScore() > 0)
+			score = std::min(score, _rule->getMaxRoundScore());
+		for (int i = 0; i < 2; i++) {
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			if (!avatar)
+				continue;
+			bool win = (i == winnerSeat);
+			int roundScore = win ? score : -score;
+			avatar->setRoundScore(roundScore);
+			avatar->setWinGold(roundScore);
+			avatar->setTotalScore(avatar->getTotalScore() + roundScore);
+		}
+	}
+
+	void DouDiZhuRoom::autoAction() {
+		if (_gameState == GameState::Bidding) {
+			doCall(_callTurn, 0);
+			return;
+		}
+		if (_gameState != GameState::Playing)
+			return;
+		if (!_isFirstPlay) {
+			std::vector<int> empty;
+			doPlay(_currentPlayer, empty);
+			return;
+		}
+		std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(_currentPlayer);
+		if (!avatar || avatar->getCards().empty())
+			return;
+		std::vector<int> ids;
+		ids.push_back(avatar->getCards().front().getId());
+		doPlay(_currentPlayer, ids);
+	}
+
+	std::string DouDiZhuRoom::playErrorText(PlayResult result) const {
+		switch (result) {
+		case PlayResult::NotYourTurn: return "不是你的回合";
+		case PlayResult::InvalidCards: return "无效的牌";
+		case PlayResult::InvalidGenre: return "无效的牌型";
+		case PlayResult::CannotBeat: return "无法大过上家";
+		case PlayResult::CannotPass: return "首出不能不要";
+		default: return "出牌失败";
+		}
+	}
+
+	void DouDiZhuRoom::onSyncTable(const NetMessage::Ptr& netMsg) {
+		std::shared_ptr<MsgDouDiZhuSync> msg = std::dynamic_pointer_cast<MsgDouDiZhuSync>(netMsg->getMessage());
+		if (!msg || !netMsg->getSession())
+			return;
+		int seat = findSeatByPlayer(msg->getPlayerId());
+		std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(seat);
+		std::shared_ptr<MsgDouDiZhuSyncResp> resp = std::make_shared<MsgDouDiZhuSyncResp>();
+		resp->gameState = static_cast<int>(_gameState);
+		resp->currentPlayer = _currentPlayer;
+		resp->mySeat = seat;
+		resp->landlordSeat = _landlordSeat;
+		resp->callStarter = _callStarter;
+		resp->highestBidSeat = _highestBidSeat;
+		resp->highestBid = _highestBid;
+		resp->callTurn = _callTurn;
+		resp->callCount = _callCount;
+		resp->multiplier = _multiplier;
+		resp->lastPlaySeat = _lastPlaySeat;
+		resp->lastPlayGenre = _lastPlayGenre.getGenre();
+		resp->isFirstPlay = _isFirstPlay;
+		resp->roundNo = _roundNo;
+		resp->playerCount = _rule->getPlayerCount();
+		fillHandCounts(resp->handCounts);
+		if (avatar) {
+			for (const PokerCard& c : avatar->getCards())
+				resp->myCards.push_back(c.getId());
+		}
+		if (_landlordSeat >= 0)
+			fillCardIds(_bottomCards, resp->bottomCards);
+		fillCardIds(_lastPlayGenre.getCards(), resp->lastPlayCards);
+		resp->send(netMsg->getSession());
+	}
+
+	void DouDiZhuRoom::onReady(const NetMessage::Ptr& netMsg) {
+		if (_gameState != GameState::None && _gameState != GameState::Ready)
+			return;
+		std::shared_ptr<MsgPlayerSignature> msg = std::dynamic_pointer_cast<MsgPlayerSignature>(netMsg->getMessage());
+		if (!msg)
+			return;
+		int seat = findSeatByPlayer(msg->getPlayerId());
+		std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(seat);
+		if (!avatar)
+			return;
+		avatar->setReady(true);
+		setState(GameState::Ready);
+		notifyReady(seat);
+		if (allReady())
+			startRound();
+	}
+
+	void DouDiZhuRoom::onCall(const NetMessage::Ptr& netMsg) {
+		std::shared_ptr<MsgDouDiZhuCall> msg = std::dynamic_pointer_cast<MsgDouDiZhuCall>(netMsg->getMessage());
+		if (!msg)
+			return;
+		int seat = findSeatByPlayer(msg->getPlayerId());
+		CallResult result = doCall(seat, msg->score);
+		if (result != CallResult::OK && netMsg->getSession()) {
+			std::shared_ptr<MsgDouDiZhuPlayFailed> resp = std::make_shared<MsgDouDiZhuPlayFailed>();
+			resp->errMsg = result == CallResult::NotYourTurn ? "不是你的叫分回合" : "叫分无效";
+			resp->send(netMsg->getSession());
+		}
+	}
+
+	void DouDiZhuRoom::onPlay(const NetMessage::Ptr& netMsg) {
+		std::shared_ptr<MsgDouDiZhuPlay> msg = std::dynamic_pointer_cast<MsgDouDiZhuPlay>(netMsg->getMessage());
+		if (!msg)
+			return;
+		int seat = findSeatByPlayer(msg->getPlayerId());
+		PlayResult result = doPlay(seat, msg->cardIds);
+		if (result != PlayResult::OK && netMsg->getSession()) {
+			std::shared_ptr<MsgDouDiZhuPlayFailed> resp = std::make_shared<MsgDouDiZhuPlayFailed>();
+			resp->errMsg = playErrorText(result);
+			resp->send(netMsg->getSession());
+		}
+	}
+
+	void DouDiZhuRoom::notifyReady(int seat) {
+		std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(seat);
+		if (!avatar)
+			return;
+		MsgPlayerReadyResp msg;
+		msg.playerId = avatar->getPlayerId();
+		msg.seat = seat;
+		sendMessageToAll(msg);
+	}
+
+	void DouDiZhuRoom::notifyDeal(const std::string& playerId) {
+		int seat = findSeatByPlayer(playerId);
+		std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(seat);
+		if (!avatar)
+			return;
+		std::shared_ptr<MsgDouDiZhuDeal> msg = std::make_shared<MsgDouDiZhuDeal>();
+		for (const PokerCard& c : avatar->getCards())
+			msg->cards.push_back(c.getId());
+		msg->callStarter = _callStarter;
+		msg->roundNo = _roundNo;
+		fillHandCounts(msg->handCounts);
+		sendMessage(*msg, playerId);
+	}
+
+	void DouDiZhuRoom::notifyCall(int seat, int score, int nextSeat) {
+		MsgDouDiZhuCallNotify msg;
+		msg.seat = seat;
+		msg.score = score;
+		msg.highestBid = _highestBid;
+		msg.highestBidSeat = _highestBidSeat;
+		msg.nextSeat = nextSeat;
+		msg.callCount = _callCount;
+		sendMessageToAll(msg);
+	}
+
+	void DouDiZhuRoom::notifyLandlord() {
+		MsgDouDiZhuLandlord msg;
+		msg.landlordSeat = _landlordSeat;
+		fillCardIds(_bottomCards, msg.bottomCards);
+		msg.multiplier = _multiplier;
+		msg.currentPlayer = _currentPlayer;
+		fillHandCounts(msg.handCounts);
+		sendMessageToAll(msg);
+	}
+
+	void DouDiZhuRoom::notifyPlay(int seat, const std::vector<int>& cardIds, int genre, int nextPlayer) {
+		MsgDouDiZhuPlayNotify msg;
+		msg.seat = seat;
+		msg.cardIds = cardIds;
+		msg.genre = genre;
+		msg.nextPlayer = nextPlayer;
+		msg.multiplier = _multiplier;
+		fillHandCounts(msg.handCounts);
+		sendMessageToAll(msg);
+	}
+
+	void DouDiZhuRoom::notifySettlement(int winnerSeat) {
+		MsgDouDiZhuSettlement msg;
+		msg.winnerSeat = winnerSeat;
+		msg.landlordSeat = _landlordSeat;
+		msg.multiplier = _multiplier;
+		msg.spring = _spring;
+		for (int i = 0; i < 2; i++) {
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+			if (!avatar)
+				continue;
+			msg.scores[i] = avatar->getRoundScore();
+			msg.winGolds[i] = avatar->getWinGold();
+			for (const PokerCard& c : avatar->getCards())
+				msg.remainCards[i].push_back(c.getId());
+		}
+		sendMessageToAll(msg);
+	}
+}

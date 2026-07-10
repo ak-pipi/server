@@ -225,14 +225,17 @@ namespace NiuMa
 		// 进入取牌后状态
 		changeState(StateMachine::Fetched);
 
-		if (pAvatar->canHu(mt)) {
-			int id = _acOpIdAlloc.askForId();
-			_acOpPool[id].setType(MahjongAction::Type::ZiMo);
-			_acOpPool[id].setId(id);
-			_acOpPool[id].setPlayer(_actor);
-			_acOpPool[id].setTileId1(mt.getId());
-			_acOps1[0].push_back(id);
-			pAvatar->addActionOption(id);
+		{
+			bool hu = pAvatar->canHu(mt);
+			if (hu) {
+				int id = _acOpIdAlloc.askForId();
+				_acOpPool[id].setType(MahjongAction::Type::ZiMo);
+				_acOpPool[id].setId(id);
+				_acOpPool[id].setPlayer(_actor);
+				_acOpPool[id].setTileId1(mt.getId());
+				_acOps1[0].push_back(id);
+				pAvatar->addActionOption(id);
+			}
 		}
 		pAvatar->fetchTile(mt);
 
@@ -269,6 +272,21 @@ namespace NiuMa
 		std::stringstream ss;
 		MahjongAction::Type actionType = _acOpPool[actionId].getType();
 		if (actionType == MahjongAction::Type::Play) {
+			if (_state == StateMachine::Action) {
+				if (pAvatar->getSeat() != _actor) {
+					ss << "逻辑错误，牌桌(Id: " << getId() << ")玩家(Id: " << pAvatar->getPlayerId() << ")在动作等待中出牌，但该玩家并非当前活动玩家!";
+					LOG_ERROR(ss.str());
+					return;
+				}
+				// 玩家在拥有自摸/杠等自行动作时直接选择出牌：清掉自己的其它动作选项后立即执行本次出牌，
+				// 避免通过 passActionOption 重新生成 Play 选项导致状态链断开。
+				clearActionOptions(pAvatar);
+				if (!executePlay(tileId)) {
+					ss << "逻辑错误，牌桌(Id: " << getId() << ")玩家(Id: " << pAvatar->getPlayerId() << ")在动作等待中出牌失败!";
+					LOG_ERROR(ss.str());
+				}
+				return;
+			}
 			if (_state != StateMachine::Play) {
 				ss << "逻辑错误，牌桌(Id: " << getId() << ")玩家(Id: " << pAvatar->getPlayerId() << ")出牌，但牌桌当前不处于等待出牌状态!";
 				LOG_ERROR(ss.str());
@@ -367,7 +385,7 @@ namespace NiuMa
 
 			// 其他玩家取消抢杠，当前活动玩家继续完成加杠连贯动作
 			const MahjongAction& ma = _actions.back();
-			if (ma.getType() == MahjongAction::Type::JiaGang) {
+			if (ma.getType() == MahjongAction::Type::JiaGang || ma.getType() == MahjongAction::Type::ZhiGang) {
 #if defined(DEBUG) || defined(_DEBUG)
 				LOG_DEBUG("取消抢杠测试");
 #endif
@@ -998,7 +1016,7 @@ bool MahjongRoom::shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const Mahj
 		ma.setSlot(static_cast<int>(_actors.size()) - 1);
 		ma.setTile(tileId);
 		_actions.push_back(ma);
-		
+
 		// 更新听牌信息
 		_rule->checkTingPai(pAvatar->getTiles(), pAvatar->getGangTiles(), pAvatar->getTingTiles(), pAvatar);
 		// 清空所有动作选项

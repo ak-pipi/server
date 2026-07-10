@@ -46,6 +46,9 @@
 #include "PaoDeKuai/PaoDeKuaiRoomHandler.h"
 #include "PaoDeKuai/PaoDeKuaiLoader.h"
 #include "PaoDeKuai/PaoDeKuaiMessages.h"
+#include "DouDiZhu/DouDiZhuRoomHandler.h"
+#include "DouDiZhu/DouDiZhuLoader.h"
+#include "DouDiZhu/DouDiZhuMessages.h"
 #include "ChangShaMahjong/ChangShaMahjongRoomHandler.h"
 #include "ChangShaMahjong/ChangShaMahjongLoader.h"
 #include "ChangShaMahjong/ChangShaMahjongMessages.h"
@@ -355,6 +358,8 @@ int main(int argc, char* argv[]) {
         NiuMa::VenueManager::getSingleton().registLoader(loader);
         loader = std::make_shared<NiuMa::PaoDeKuaiLoader>();
         NiuMa::VenueManager::getSingleton().registLoader(loader);
+        loader = std::make_shared<NiuMa::DouDiZhuLoader>();
+        NiuMa::VenueManager::getSingleton().registLoader(loader);
         loader = std::make_shared<NiuMa::ChangShaMahjongLoader>();
         NiuMa::VenueManager::getSingleton().registLoader(loader);
         loader = std::make_shared<NiuMa::YiYangWaiHuZiLoader>();
@@ -434,6 +439,13 @@ int main(int argc, char* argv[]) {
             handlers.push_back(handler);
             NiuMa::VenueManager::getSingleton().registHandler(handler);
         }
+        // 创建斗地主游戏房间内部网络消息处理器
+        for (int i = 0; i < threadNum; i++) {
+            handler = std::make_shared<NiuMa::DouDiZhuRoomHandler>();
+            handler->registSelf();
+            handlers.push_back(handler);
+            NiuMa::VenueManager::getSingleton().registHandler(handler);
+        }
         // 创建长沙麻将游戏房间内部网络消息处理器
         for (int i = 0; i < threadNum; i++) {
             handler = std::make_shared<NiuMa::ChangShaMahjongRoomHandler>();
@@ -472,6 +484,7 @@ int main(int argc, char* argv[]) {
         NiuMa::TaoJiangMahjongMessages::registMessages();
         NiuMa::HongZhongMahjongMessages::registMessages();
         NiuMa::PaoDeKuaiMessages::registMessages();
+        NiuMa::DouDiZhuMessages::registMessages();
         NiuMa::ChangShaMahjongMessages::registMessages();
         NiuMa::YiYangWaiHuZiMessages::registMessages();
         NiuMa::YuanJiangQianFenMessages::registMessages();

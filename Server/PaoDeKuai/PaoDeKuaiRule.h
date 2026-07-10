@@ -65,6 +65,12 @@ namespace NiuMa
 		// 获取玩家数
 		int getPlayerCount() const { return _playerCount; }
 
+		// 获取底注
+		int getBaseScore() const { return _baseScore; }
+
+		// 获取总局数，0表示不限局数
+		int getRoundCount() const { return _roundCount; }
+
 		// 炸弹是否翻倍
 		bool getBombDouble() const { return _bombDouble; }
 
@@ -83,6 +89,12 @@ namespace NiuMa
 		// 首出规则：是否必须出包含黑桃3的牌
 		bool getMustIncludeSpade3() const { return _mustIncludeSpade3; }
 
+		// 输家一张未出是否翻倍
+		bool getSpringDouble() const { return _springDouble; }
+
+		// 有牌能大过上家时是否禁止过牌
+		bool getForcePlayIfCanBeat() const { return _forcePlayIfCanBeat; }
+
 		// 从JSON配置中加载
 		void loadConfig(const std::string& ruleConfig);
 
@@ -92,6 +104,12 @@ namespace NiuMa
 
 		// 玩家数
 		int _playerCount;
+
+		// 底注
+		int _baseScore;
+
+		// 总局数，0表示不限局数
+		int _roundCount;
 
 		// 炸弹翻倍
 		bool _bombDouble;
@@ -110,6 +128,12 @@ namespace NiuMa
 
 		// 首出必须包含黑桃3
 		bool _mustIncludeSpade3;
+
+		// 输家一张未出翻倍
+		bool _springDouble;
+
+		// 有大必出
+		bool _forcePlayIfCanBeat;
 	};
 }
 

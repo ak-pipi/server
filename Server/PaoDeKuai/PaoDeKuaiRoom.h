@@ -24,7 +24,8 @@ namespace NiuMa
 			const std::string& venueId,
 			const std::string& number,
 			int level,
-			const std::string& ruleConfig);
+			const std::string& ruleConfig,
+			int districtId = 0);
 		virtual ~PaoDeKuaiRoom();
 
 	private:
@@ -45,7 +46,8 @@ namespace NiuMa
 			InvalidCards,	// 不是你的手牌
 			InvalidGenre,	// 牌型不合法
 			CannotBeat,		// 无法大过上家
-			MustIncludeSpade3 // 首出必须包含黑桃3
+			MustIncludeSpade3, // 首出必须包含黑桃3
+			CannotPass		// 有牌能大过上家，不能过牌
 		};
 
 	private:
@@ -63,6 +65,9 @@ namespace NiuMa
 
 		// 等级
 		int _level;
+
+		// 区域ID，0表示好友房/练习房
+		int _districtId;
 
 		// 当前游戏状态
 		GameState _gameState;
@@ -94,6 +99,12 @@ namespace NiuMa
 		// 炸弹翻倍次数
 		int _bombCount;
 
+		// 当前结算倍数
+		int _multiplier;
+
+		// 本局是否关门/春天
+		bool _spring;
+
 		// 托管超时计时器
 		time_t _autoPlayTime;
 
@@ -113,6 +124,8 @@ namespace NiuMa
 		virtual GameAvatar::Ptr createAvatar(const std::string& playerId, int seat, bool robot) const override;
 		virtual bool checkEnter(const std::string& playerId, std::string& errMsg, bool robot = false) const override;
 		virtual int checkLeave(const std::string& playerId, std::string& errMsg) const override;
+		virtual void getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const override;
+		virtual void onAvatarJoined(int seat, const std::string& playerId) override;
 		virtual void onAvatarLeaved(int seat, const std::string& playerId) override;
 		virtual void clean() override;
 
@@ -148,6 +161,15 @@ namespace NiuMa
 		// 验证出牌
 		PlayResult validatePlay(int seat, const std::vector<int>& cardIds, PokerGenre& genre) const;
 
+		// 指定玩家是否有能大过上手的牌
+		bool hasBeatingPlay(int seat) const;
+
+		// 枚举手牌，查找一手自动出牌
+		bool findAutoPlay(int seat, bool firstPlay, std::vector<int>& cardIds) const;
+
+		// 当前牌型是否优于已选自动牌型
+		bool betterAutoPlay(const PokerGenre& candidate, const PokerGenre& current, bool firstPlay) const;
+
 		// 检查手牌中是否有黑桃3
 		bool hasSpade3(int seat) const;
 
@@ -168,6 +190,12 @@ namespace NiuMa
 
 		// 获取下一个座位号
 		int getNextSeat(int seat) const;
+
+		// 更新区域匹配房间未满列表
+		void updateDistrictNotFull();
+
+		// 记录区域玩家离场轨迹
+		void recordDistrictPlayerTrack(const std::string& playerId);
 
 		// 消息处理
 		void onSyncTable(const NetMessage::Ptr& netMsg);

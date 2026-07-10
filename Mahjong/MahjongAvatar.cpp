@@ -308,7 +308,10 @@ namespace NiuMa
 	}
 
 	bool MahjongAvatar::playTile(int id) {
-		return removeTile(id);
+		bool ret = removeTile(id);
+		if (ret)
+			clearPassedHu();
+		return ret;
 	}
 
 	bool MahjongAvatar::canChi(const MahjongTile& mt, std::vector<std::pair<int, int> >& lstPairs) const {
@@ -437,6 +440,10 @@ namespace NiuMa
 		_passedHu.push_back(mt);
 	}
 
+	void MahjongAvatar::clearPassedHu() {
+		_passedHu.clear();
+	}
+
 	void MahjongAvatar::passPeng(const MahjongTile& mt) {
 		_passedPeng.push_back(mt);
 	}
@@ -474,6 +481,7 @@ namespace NiuMa
 		mc.setTargetPlayer(player);
 		mc.setAllTiles(lstTemp);
 		_chapters.push_back(mc);
+		clearPassedHu();
 
 		return true;
 	}
@@ -506,6 +514,7 @@ namespace NiuMa
 		mc.setTargetPlayer(player);
 		mc.setAllTiles(lstTemp);
 		_chapters.push_back(mc);
+		clearPassedHu();
 
 		return true;
 	}
@@ -539,6 +548,7 @@ namespace NiuMa
 
 		_huGangs[3]++;
 		_gangs[2]++;
+		clearPassedHu();
 
 		return true;
 	}
@@ -579,6 +589,7 @@ namespace NiuMa
 
 		_huGangs[2]++;
 		_gangs[1]++;
+		clearPassedHu();
 
 		return true;
 	}
@@ -607,6 +618,7 @@ namespace NiuMa
 
 		_huGangs[1]++;
 		_gangs[0]++;
+		clearPassedHu();
 
 		return true;
 	}
@@ -727,6 +739,10 @@ namespace NiuMa
 
 	void MahjongAvatar::addHuWay(MahjongGenre::HuWay eWay) {
 		_huWay |= static_cast<int>(eWay);
+	}
+
+	void MahjongAvatar::removeHuWay(MahjongGenre::HuWay eWay) {
+		_huWay &= ~static_cast<int>(eWay);
 	}
 
 	unsigned int MahjongAvatar::getHuStyle() const {

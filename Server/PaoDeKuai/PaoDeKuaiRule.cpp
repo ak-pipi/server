@@ -5,18 +5,45 @@
 #include "Base/Log.h"
 
 #include <json/json.h>
+#include <algorithm>
+#include <unordered_map>
 
 namespace NiuMa
 {
+	namespace
+	{
+		void setOfficerByPoint(PokerGenre& pcg, const CardArray& cards, int point)
+		{
+			for (CardArray::const_reverse_iterator it = cards.rbegin(); it != cards.rend(); ++it) {
+				if (it->getPoint() == point) {
+					pcg.setOfficer(*it);
+					return;
+				}
+			}
+		}
+
+		std::unordered_map<int, int> countPoints(const CardArray& cards)
+		{
+			std::unordered_map<int, int> counts;
+			for (const PokerCard& c : cards)
+				counts[c.getPoint()]++;
+			return counts;
+		}
+	}
+
 	PaoDeKuaiRule::PaoDeKuaiRule()
 		: _cardCount(15)
 		, _playerCount(2)
+		, _baseScore(1)
+		, _roundCount(8)
 		, _bombDouble(true)
 		, _bombScore(10)
 		, _allowPass(true)
 		, _autoPlayTimeout(30000)
-		, _maxRoundScore(100)
+		, _maxRoundScore(0)
 		, _mustIncludeSpade3(true)
+		, _springDouble(true)
+		, _forcePlayIfCanBeat(true)
 	{
 		_orderTable = new CardOrderTable();
 	}
@@ -33,7 +60,7 @@ namespace NiuMa
 	}
 
 	int PaoDeKuaiRule::getPointNums() const {
-		return 15; // 3~10, J, Q, K, A, 2, 小王, 大王
+		return 14; // 3~10, J, Q, K, A, 2, Joker(牌池中已移除)
 	}
 
 	void PaoDeKuaiRule::sortPointOrder() {
@@ -67,8 +94,17 @@ namespace NiuMa
 	}
 
 	bool PaoDeKuaiRule::isDisapprovedCard(const PokerCard& c) const {
-		// 跑得快2人版去掉大小王（根据配置也可以保留）
-		// 这里不去掉任何牌，让牌池完整，发牌时处理
+		int pt = c.getPoint();
+		int suit = c.getSuit();
+		// 15张跑得快牌库：去掉大小王、三张2、三张A、一张K，共45张牌。
+		if (pt == static_cast<int>(PokerPoint::Joker))
+			return true;
+		if (pt == static_cast<int>(PokerPoint::Two))
+			return suit != static_cast<int>(PokerSuit::Spade);
+		if (pt == static_cast<int>(PokerPoint::Ace))
+			return suit != static_cast<int>(PokerSuit::Spade);
+		if (pt == static_cast<int>(PokerPoint::King))
+			return suit == static_cast<int>(PokerSuit::Diamond);
 		return false;
 	}
 
@@ -170,66 +206,52 @@ namespace NiuMa
 
 		// 飞机带单（连续三条+等量单张）
 		// 飞机带对（连续三条+等量对子）
-		// 检查是否含连续三条
-		{
-			// 统计各牌值数量
-			std::unordered_map<int, int> pointCounts;
-			for (auto& c : cards) {
-				auto it = pointCounts.find(c.getPoint());
-				if (it != pointCounts.end())
-					it->second++;
-				else
-					pointCounts[c.getPoint()] = 1;
-			}
-
-			// 找出三条
-			std::vector<int> triples;
-			for (auto& kv : pointCounts) {
-				if (kv.second >= 3)
-					triples.push_back(kv.first);
-			}
-
-			if (triples.size() >= 2) {
-				// 按牌值排序
-				std::vector<int> orders;
-				for (int pt : triples) {
-					orders.push_back(getPointOrder(pt));
-				}
-				std::sort(orders.begin(), orders.end());
-
-				// 找最长连续三条序列
-				int seqStart = 0;
-				int seqLen = 1;
-				int bestStart = 0;
-				int bestLen = 1;
-				for (size_t i = 1; i < orders.size(); i++) {
-					if (orders[i] == orders[i - 1] + 1 &&
-						orders[i] < 12) { // 2和王者不参与连续
-						seqLen++;
-						if (seqLen > bestLen) {
-							bestLen = seqLen;
-							bestStart = seqStart;
-						}
-					}
-					else {
-						seqStart = static_cast<int>(i);
-						seqLen = 1;
+		if ((n % 4 == 0 && n >= 8) || (n % 5 == 0 && n >= 10)) {
+			std::unordered_map<int, int> pointCounts = countPoints(cards);
+			int planeLen = (n % 4 == 0) ? (n / 4) : (n / 5);
+			for (int start = 0; start <= 11 - planeLen + 1; start++) {
+				bool ok = true;
+				for (int i = 0; i < planeLen; i++) {
+					int point = getPointByOrder(start + i);
+					if (pointCounts[point] < 3) {
+						ok = false;
+						break;
 					}
 				}
+				if (!ok)
+					continue;
 
-				if (bestLen >= 2) {
-					int planeCards = bestLen * 3;
-					int remaining = n - planeCards;
-					if (remaining == bestLen) {
-						// 飞机带单
+				std::unordered_map<int, int> mates = pointCounts;
+				for (int i = 0; i < planeLen; i++) {
+					int point = getPointByOrder(start + i);
+					mates[point] -= 3;
+				}
+
+				if (n % 4 == 0) {
+					int singles = 0;
+					for (const auto& kv : mates)
+						singles += kv.second;
+					if (singles == planeLen) {
 						pcg.setGenre(static_cast<int>(PaoDeKuaiGenre::PlaneOne));
-						pcg.setOfficer(cards[n - 1]);
+						setOfficerByPoint(pcg, cards, getPointByOrder(start + planeLen - 1));
 						return static_cast<int>(PaoDeKuaiGenre::PlaneOne);
 					}
-					else if (remaining == bestLen * 2) {
-						// 飞机带对
+				}
+				else {
+					int pairs = 0;
+					bool pairOk = true;
+					for (const auto& kv : mates) {
+						if (kv.second == 0)
+							continue;
+						if (kv.second != 2) {
+							pairOk = false;
+							break;
+						}
+						pairs++;
+					}
+					if (pairOk && pairs == planeLen) {
 						pcg.setGenre(static_cast<int>(PaoDeKuaiGenre::PlanePair));
-						pcg.setOfficer(cards[n - 1]);
+						setOfficerByPoint(pcg, cards, getPointByOrder(start + planeLen - 1));
 						return static_cast<int>(PaoDeKuaiGenre::PlanePair);
 					}
 				}
@@ -370,6 +392,10 @@ namespace NiuMa
 			_cardCount = root["card_count"].asInt();
 		if (root.isMember("player_count") && root["player_count"].isInt())
 			_playerCount = root["player_count"].asInt();
+		if (root.isMember("base_score") && root["base_score"].isInt())
+			_baseScore = root["base_score"].asInt();
+		if (root.isMember("round_count") && root["round_count"].isInt())
+			_roundCount = root["round_count"].asInt();
 		if (root.isMember("bomb_double") && root["bomb_double"].isBool())
 			_bombDouble = root["bomb_double"].asBool();
 		if (root.isMember("bomb_score") && root["bomb_score"].isInt())
@@ -380,7 +406,22 @@ namespace NiuMa
 			_autoPlayTimeout = root["auto_play_timeout"].asInt();
 		if (root.isMember("max_round_score") && root["max_round_score"].isInt())
 			_maxRoundScore = root["max_round_score"].asInt();
+		if (root.isMember("max_score") && root["max_score"].isInt())
+			_maxRoundScore = root["max_score"].asInt();
 		if (root.isMember("must_include_spade3") && root["must_include_spade3"].isBool())
 			_mustIncludeSpade3 = root["must_include_spade3"].asBool();
+		if (root.isMember("spring_double") && root["spring_double"].isBool())
+			_springDouble = root["spring_double"].asBool();
+		if (root.isMember("force_play_if_can_beat") && root["force_play_if_can_beat"].isBool())
+			_forcePlayIfCanBeat = root["force_play_if_can_beat"].asBool();
+
+		_playerCount = 2;
+		_cardCount = 15;
+		if (_baseScore < 1)
+			_baseScore = 1;
+		if (_roundCount < 0)
+			_roundCount = 0;
+		if (_autoPlayTimeout < 5000)
+			_autoPlayTimeout = 5000;
 	}
 }

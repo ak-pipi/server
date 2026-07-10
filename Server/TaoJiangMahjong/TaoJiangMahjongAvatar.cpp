@@ -9,12 +9,71 @@
 
 namespace NiuMa
 {
+	namespace
+	{
+		bool isSequenceTile(const MahjongTile::Tile& tile, MahjongTile::Pattern pat, int num) {
+			return tile.getPattern() == pat && static_cast<int>(tile.getNumber()) == num;
+		}
+
+		bool canAssignToSequence(const MahjongTileArray& tiles, const MahjongTile::Tile& laiZi,
+			MahjongTile::Pattern pat, int start) {
+			bool used[3] = { false, false, false };
+			int wild = 0;
+			for (const MahjongTile& mt : tiles) {
+				if (laiZi.isValid() && mt.getTile() == laiZi) {
+					wild++;
+					continue;
+				}
+				bool matched = false;
+				for (int i = 0; i < 3; i++) {
+					if (!used[i] && isSequenceTile(mt.getTile(), pat, start + i)) {
+						used[i] = true;
+						matched = true;
+						break;
+					}
+				}
+				if (!matched)
+					return false;
+			}
+			int missing = 0;
+			for (int i = 0; i < 3; i++) {
+				if (!used[i])
+					missing++;
+			}
+			return wild >= missing;
+		}
+
+		bool canFormPengWithWildcards(const MahjongTileArray& tiles, const MahjongTile::Tile& laiZi) {
+			for (int pi = 0; pi < 3; pi++) {
+				MahjongTile::Pattern pat = static_cast<MahjongTile::Pattern>(
+					static_cast<int>(MahjongTile::Pattern::Tong) + pi);
+				for (int ni = 1; ni <= 9; ni++) {
+					MahjongTile::Tile target(pat, static_cast<MahjongTile::Number>(ni));
+					bool ok = true;
+					for (const MahjongTile& mt : tiles) {
+						if (laiZi.isValid() && mt.getTile() == laiZi)
+							continue;
+						if (mt.getTile() != target) {
+							ok = false;
+							break;
+						}
+					}
+					if (ok)
+						return true;
+				}
+			}
+			return false;
+		}
+	}
+
 	TaoJiangMahjongAvatar::TaoJiangMahjongAvatar(const std::string& playerId, int seat, bool bRobot)
 		: MahjongAvatar(playerId, seat, bRobot)
 		, _winGold(0.0)
 		, _baoTinged(false)
+		, _afterGang(false)
 		, _yingZhuang(false)
 		, _laiZi(MahjongTile::Tile())
+		, _mingZi(MahjongTile::Tile())
 	{
 		for (int i = 0; i < 4; i++)
 			_loseScores[i] = 0;
@@ -29,15 +88,33 @@ namespace NiuMa
 			_loseScores[i] = 0;
 		_winGold = 0.0;
 		_baoTinged = false;
+		_baoTingTiles.clear();
+		_afterGang = false;
 		_yingZhuang = false;
 	}
 
 	void TaoJiangMahjongAvatar::setBaoTinged(bool b) {
 		_baoTinged = b;
+		if (b)
+			_baoTingTiles = _tingTiles;
+		else
+			_baoTingTiles.clear();
 	}
 
 	bool TaoJiangMahjongAvatar::isBaoTinged() const {
 		return _baoTinged;
+	}
+
+	const MahjongGenre::TingPaiArray& TaoJiangMahjongAvatar::getBaoTingTiles() const {
+		return _baoTingTiles;
+	}
+
+	void TaoJiangMahjongAvatar::setAfterGang(bool v) {
+		_afterGang = v;
+	}
+
+	bool TaoJiangMahjongAvatar::isAfterGang() const {
+		return _afterGang;
 	}
 
 	void TaoJiangMahjongAvatar::setYingZhuang(bool b) {
@@ -56,14 +133,26 @@ namespace NiuMa
 		// 先从_tingTiles中获取基础胡牌样式（平胡）
 		_huStyle = 0;
 		bool bFound = false;
-		MahjongGenre::TingPaiArray::const_iterator it = _tingTiles.begin();
-		while (it != _tingTiles.end()) {
+		const MahjongGenre::TingPaiArray& huTiles = _baoTinged ? _baoTingTiles : _tingTiles;
+		MahjongGenre::TingPaiArray::const_iterator it = huTiles.begin();
+		while (it != huTiles.end()) {
 			if (mt.isSame(it->tile)) {
 				_huStyle = it->style;
 				bFound = true;
 				break;
 			}
 			++it;
+		}
+		if (!bFound) {
+			if (bZiMo && _mingZi.isValid()) {
+				int mingZiCount = 0;
+				for (const MahjongTile& t : _handTiles) {
+					if (t.getTile() == _mingZi)
+						mingZiCount++;
+				}
+				if (mingZiCount >= 3)
+					bFound = true;
+			}
 		}
 		if (!bFound)
 			return false;
@@ -72,8 +161,19 @@ namespace NiuMa
 		MahjongTileArray lstAll;
 		lstAll.reserve(_handTiles.size() + _chapters.size() * 4 + 1);
 		lstAll = _handTiles;
-		if (!bZiMo)
+		if (!bZiMo) {
 			lstAll.push_back(mt);
+		} else if (mt.isValid()) {
+			bool inHand = false;
+			for (const MahjongTile& handTile : _handTiles) {
+				if (handTile.getId() == mt.getId()) {
+					inHand = true;
+					break;
+				}
+			}
+			if (!inHand)
+				lstAll.push_back(mt);
+		}
 		MahjongChapterArray::const_iterator it1 = _chapters.begin();
 		while (it1 != _chapters.end()) {
 			const MahjongTileArray& lstTiles = it1->getAllTiles();
@@ -112,6 +212,7 @@ namespace NiuMa
 			}
 			if (qingYiSe)
 				_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QingYiSe);
+
 		} else if (laiziCount == lstAll.size()) {
 			// 全部是赖子牌，也算清一色
 			_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QingYiSe);
@@ -179,9 +280,11 @@ namespace NiuMa
 			if (pengPengHu && !hasJiang && laiziCount >= 2) {
 				needWild += 2;
 			}
-			if (pengPengHu && needWild <= laiziCount) {
+			bool pengPengHuResult = (pengPengHu && needWild <= laiziCount);
+			if (pengPengHuResult) {
 				_huStyle |= static_cast<int>(MahjongGenre::HuStyle::PengPengHu);
 			}
+
 			} // if (!hasChi)
 		}
 
@@ -189,7 +292,15 @@ namespace NiuMa
 		// 所有非赖子牌的数字必须是2、5、8
 		{
 			bool jiangJiangHu = true;
+			for (const auto& ch : _chapters) {
+				if (ch.getType() == MahjongChapter::Type::Chi) {
+					jiangJiangHu = false;
+					break;
+				}
+			}
 			for (const auto& t : lstNormal) {
+				if (!jiangJiangHu)
+					break;
 				MahjongTile::Number num = t.getNumber();
 				if (num != MahjongTile::Number::Er &&
 					num != MahjongTile::Number::Wu &&
@@ -200,6 +311,7 @@ namespace NiuMa
 			}
 			if (jiangJiangHu)
 				_huStyle |= static_cast<int>(MahjongGenre::HuStyle::JiangJiangHu);
+
 		}
 
 		// === 检测七小对（含赖子万能牌） ===
@@ -222,16 +334,23 @@ namespace NiuMa
 			int wildRemain = laiziSingles - pairedWithWild;
 			int normalRemain = singleCount - pairedWithWild;
 			int totalPairs = pairCount + laiziPairs + pairedWithWild + wildRemain / 2;
-			if (normalRemain == 0 && totalPairs >= 7) {
+			bool qiXiaoDuiResult = (normalRemain == 0 && totalPairs >= 7);
+			if (qiXiaoDuiResult) {
 				_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui);
-				// 豪七对：含4张相同牌（不考虑赖子替代，仅检查普通牌）
+				// 豪七对/双豪七对：含4张相同牌（不考虑赖子替代，仅检查普通牌）
+				int quadCount = 0;
 				for (const auto& kv : tileCounts) {
-					if (kv.second >= 4) {
-						_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3);
-						break;
-					}
+					if (kv.second >= 4)
+						quadCount++;
 				}
+				if (quadCount == 1)
+					_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1);
+				else if (quadCount == 2)
+					_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2);
+				else if (quadCount >= 3)
+					_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3);
 			}
+
 		}
 
 		return true;
@@ -256,17 +375,17 @@ namespace NiuMa
 		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::PingHu)) == static_cast<int>(MahjongGenre::HuStyle::PingHu))
 			isPingHu = true;
 
-		// 检测七小对（包括豪七对）
+		// 检测七小对（包括豪七对/双豪七对）
 		bool isQiXiaoDui = false;
-		bool isHaoQiDui = false; // 豪七对（含4张相同牌）
+		int haoQiDuiLevel = 0; // 豪七对等级: 0=无, 1=豪七对(1组4张), 2=双豪七对(2组4张), 3=三豪七对(3组4张)
 		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui)) {
 			isQiXiaoDui = true;
-			// 豪七对：含4张相同牌的七小对
-			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1) ||
-				(_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2) ||
-				(_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3)) {
-				isHaoQiDui = true;
-			}
+			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1))
+				haoQiDuiLevel = 1;  // 1组4张 = 2大胡
+			else if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2))
+				haoQiDuiLevel = 2;  // 2组4张 = 3大胡
+			else if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3))
+				haoQiDuiLevel = 3;  // 3组4张 = 4大胡
 		}
 
 		// 检测碰碰胡
@@ -292,13 +411,21 @@ namespace NiuMa
 			isQingYiSe = true;
 
 		// 统计大胡数量
-		if (isQiXiaoDui && !isHaoQiDui) {
+		if (isQiXiaoDui && haoQiDuiLevel == 0) {
 			// 七小对 = 1个大胡
 			daHuCount += 1;
 		}
-		if (isHaoQiDui) {
+		if (haoQiDuiLevel == 1) {
 			// 豪七对 = 2个大胡
 			daHuCount += 2;
+		}
+		else if (haoQiDuiLevel == 2) {
+			// 双豪七对 = 3个大胡
+			daHuCount += 3;
+		}
+		else if (haoQiDuiLevel >= 3) {
+			// 三豪七对 = 4个大胡
+			daHuCount += 4;
 		}
 		if (isPengPengHu) {
 			// 碰碰胡 = 1个大胡
@@ -342,22 +469,19 @@ namespace NiuMa
 		if (_baoTinged)
 			daHuCount += 1;
 
-		// 计算得分：底分8 × 大胡倍率(3^daHuCount)
-		// 公式：8底分 × 3^daHuCount
-		int score = 8;
-		for (int i = 0; i < daHuCount; i++)
-			score *= 3;
-
-		// 硬庄额外 x2
+		// 硬庄作为一个大牌累计
 		if (_yingZhuang)
-			score *= 2;
+			daHuCount += 1;
 
-		// 地胡：按大胡计分（已通过上面的逻辑处理）
-		// 地胡本身算一个大胡
+		// 地胡：拥有3张明子牌且能正常胡牌，算1个大胡
 		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu)) {
-			// 地胡已在基类检测中处理
-			// 地胡=拥有三张赖子本身牌，摸完牌即可胡
+			daHuCount += 1;
+			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::PingHu)) == static_cast<int>(MahjongGenre::HuStyle::PingHu))
+				daHuCount += 1;
 		}
+
+		int multiplier = (daHuCount > 0) ? (daHuCount * 3) : 1;
+		int score = 8 * multiplier;
 
 		return score;
 	}
@@ -366,18 +490,21 @@ namespace NiuMa
 		int daHuCount = 0;
 
 		bool isQiXiaoDui = false;
-		bool isHaoQiDui = false;
+		int haoQiDuiLevel = 0;
 		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui)) {
 			isQiXiaoDui = true;
-			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1) ||
-				(_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2) ||
-				(_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3)) {
-				isHaoQiDui = true;
-			}
+			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1))
+				haoQiDuiLevel = 1;
+			else if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2))
+				haoQiDuiLevel = 2;
+			else if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3))
+				haoQiDuiLevel = 3;
 		}
 
-		if (isQiXiaoDui && !isHaoQiDui) daHuCount += 1;
-		if (isHaoQiDui) daHuCount += 2;
+		if (isQiXiaoDui && haoQiDuiLevel == 0) daHuCount += 1;
+		if (haoQiDuiLevel == 1) daHuCount += 2;
+		else if (haoQiDuiLevel == 2) daHuCount += 3;
+		else if (haoQiDuiLevel >= 3) daHuCount += 4;
 		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::PengPengHu)) == static_cast<int>(MahjongGenre::HuStyle::PengPengHu)) daHuCount += 1;
 		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::JiangJiangHu)) == static_cast<int>(MahjongGenre::HuStyle::JiangJiangHu)) daHuCount += 1;
 		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::HeiTianHu)) == static_cast<int>(MahjongGenre::HuStyle::HeiTianHu)) daHuCount += 1;
@@ -391,7 +518,17 @@ namespace NiuMa
 		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::GangShangHua1)) == static_cast<int>(MahjongGenre::HuWay::GangShangHua1))
 			daHuCount += 1;
 
+		// 地胡算1个大胡
+		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu)) {
+			daHuCount += 1;
+			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::PingHu)) == static_cast<int>(MahjongGenre::HuStyle::PingHu))
+				daHuCount += 1;
+		}
+
 		if (_baoTinged)
+			daHuCount += 1;
+
+		if (_yingZhuang)
 			daHuCount += 1;
 
 		return daHuCount;
@@ -423,12 +560,14 @@ namespace NiuMa
 		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::HeiTianHu)) == static_cast<int>(MahjongGenre::HuStyle::HeiTianHu))
 			name += "黑天胡+";
 
-		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3) ||
-			(_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2) ||
-			(_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1))
+		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3))
+			name += "三豪七对+";
+		else if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2))
+			name += "双豪七对+";
+		else if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1))
 			name += "豪七对+";
 		else if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui)) == static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui))
-			name += "七小队+";
+			name += "七小对+";
 
 		if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::PengPengHu)) == static_cast<int>(MahjongGenre::HuStyle::PengPengHu))
 			name += "碰碰胡+";
@@ -448,6 +587,20 @@ namespace NiuMa
 			name += "(硬庄)";
 
 		return name;
+	}
+
+	void TaoJiangMahjongAvatar::getHuCalcState(int& style, int& styleEx, int& way, bool& yingZhuang) const {
+		style = _huStyle;
+		styleEx = _huStyleEx;
+		way = _huWay;
+		yingZhuang = _yingZhuang;
+	}
+
+	void TaoJiangMahjongAvatar::restoreHuCalcState(int style, int styleEx, int way, bool yingZhuang) {
+		_huStyle = style;
+		_huStyleEx = styleEx;
+		_huWay = way;
+		_yingZhuang = yingZhuang;
 	}
 
 	void TaoJiangMahjongAvatar::addLoseScore(int seat, int s) {
@@ -475,5 +628,173 @@ namespace NiuMa
 
 	const MahjongTile::Tile& TaoJiangMahjongAvatar::getLaiZi() const {
 		return _laiZi;
+	}
+
+	void TaoJiangMahjongAvatar::setMingZi(const MahjongTile::Tile& tile) {
+		_mingZi = tile;
+	}
+
+	const MahjongTile::Tile& TaoJiangMahjongAvatar::getMingZi() const {
+		return _mingZi;
+	}
+
+	bool TaoJiangMahjongAvatar::canZhiGang(const MahjongTile& mt) const {
+		// 桃江麻将规则：没有听牌时不能直杠
+		if (_tingTiles.empty())
+			return false;
+		return MahjongAvatar::canZhiGang(mt);
+	}
+
+	bool TaoJiangMahjongAvatar::canPeng(const MahjongTile& mt, std::string& passed) const {
+		// 桃江麻将规则：开杠后不能碰
+		if (_afterGang || _baoTinged)
+			return false;
+		passed.clear();
+		for (size_t i = 0; i < _handTiles.size(); i++) {
+			for (size_t j = i + 1; j < _handTiles.size(); j++) {
+				MahjongTileArray testTiles;
+				testTiles.push_back(mt);
+				testTiles.push_back(_handTiles[i]);
+				testTiles.push_back(_handTiles[j]);
+				if (canFormPengWithWildcards(testTiles, _laiZi)) {
+					return true;
+				}
+			}
+		}
+		return MahjongAvatar::canPeng(mt, passed);
+	}
+
+	bool TaoJiangMahjongAvatar::canChi(const MahjongTile& mt, std::vector<std::pair<int, int> >& lstPairs) const {
+		// 桃江麻将规则：开杠后不能吃
+		if (_afterGang || _baoTinged)
+			return false;
+		lstPairs.clear();
+		for (size_t i = 0; i < _handTiles.size(); i++) {
+			for (size_t j = i + 1; j < _handTiles.size(); j++) {
+				MahjongTileArray tiles;
+				tiles.push_back(mt);
+				tiles.push_back(_handTiles[i]);
+				tiles.push_back(_handTiles[j]);
+				bool ok = false;
+				for (int pi = 0; pi < 3 && !ok; pi++) {
+					MahjongTile::Pattern pat = static_cast<MahjongTile::Pattern>(
+						static_cast<int>(MahjongTile::Pattern::Tong) + pi);
+					for (int start = 1; start <= 7; start++) {
+						if (canAssignToSequence(tiles, _laiZi, pat, start)) {
+							ok = true;
+							break;
+						}
+					}
+				}
+				if (ok)
+					lstPairs.push_back(std::make_pair(_handTiles[i].getId(), _handTiles[j].getId()));
+			}
+		}
+		return !lstPairs.empty();
+	}
+
+	bool TaoJiangMahjongAvatar::canHu(const MahjongTile& mt) const {
+		const MahjongGenre::TingPaiArray& huTiles = _baoTinged ? _baoTingTiles : _tingTiles;
+		for (const MahjongGenre::TingPai& tp : huTiles) {
+			if (mt.isSame(tp.tile))
+				return true;
+		}
+		if (!_baoTinged && _mingZi.isValid()) {
+			int count = 0;
+			for (const MahjongTile& t : _handTiles) {
+				if (t.getTile() == _mingZi)
+					count++;
+			}
+			if (mt.getTile() == _mingZi)
+				count++;
+			if (count >= 3)
+				return true;
+		}
+		return false;
+	}
+
+	bool TaoJiangMahjongAvatar::playTile(int id) {
+		if (_baoTinged && id != getFetchedTileId())
+			return false;
+		return MahjongAvatar::playTile(id);
+	}
+
+	bool TaoJiangMahjongAvatar::doChi(const MahjongTile& mt, int id1, int id2, int actionId, int player) {
+		MahjongTile mt1;
+		MahjongTile mt2;
+		mt1.setId(id1);
+		mt2.setId(id2);
+		if (!getTile(mt1) || !getTile(mt2))
+			return false;
+
+		MahjongTileArray lstTemp;
+		lstTemp.push_back(mt);
+		lstTemp.push_back(mt1);
+		lstTemp.push_back(mt2);
+		bool ok = false;
+		for (int pi = 0; pi < 3 && !ok; pi++) {
+			MahjongTile::Pattern pat = static_cast<MahjongTile::Pattern>(
+				static_cast<int>(MahjongTile::Pattern::Tong) + pi);
+			for (int start = 1; start <= 7; start++) {
+				if (canAssignToSequence(lstTemp, _laiZi, pat, start)) {
+					ok = true;
+					break;
+				}
+			}
+		}
+		if (!ok)
+			return false;
+
+		removeTile(id1);
+		removeTile(id2);
+		std::sort(lstTemp.begin(), lstTemp.end());
+
+		MahjongChapter mc;
+		mc.addType(MahjongChapter::Type::Chi, actionId);
+		mc.setTargetTile(mt.getId());
+		mc.setTargetPlayer(player);
+		mc.setAllTiles(lstTemp);
+		_chapters.push_back(mc);
+		clearPassedHu();
+
+		return true;
+	}
+
+	bool TaoJiangMahjongAvatar::doPeng(const MahjongTile& mt, int actionId, int player) {
+		MahjongTileArray lstTemp;
+		lstTemp.reserve(3);
+		std::vector<int> removeIds;
+		for (size_t i = 0; i < _handTiles.size() && removeIds.empty(); i++) {
+			for (size_t j = i + 1; j < _handTiles.size(); j++) {
+				MahjongTileArray testTiles;
+				testTiles.push_back(mt);
+				testTiles.push_back(_handTiles[i]);
+				testTiles.push_back(_handTiles[j]);
+				if (canFormPengWithWildcards(testTiles, _laiZi)) {
+					lstTemp.push_back(_handTiles[i]);
+					lstTemp.push_back(_handTiles[j]);
+					removeIds.push_back(_handTiles[i].getId());
+					removeIds.push_back(_handTiles[j].getId());
+					break;
+				}
+			}
+		}
+		lstTemp.push_back(mt);
+		if (removeIds.size() < 2 || !canFormPengWithWildcards(lstTemp, _laiZi))
+			return false;
+
+		for (int id : removeIds)
+			removeTile(id);
+
+		std::sort(lstTemp.begin(), lstTemp.end());
+		MahjongChapter mc;
+		mc.addType(MahjongChapter::Type::Peng, actionId);
+		mc.setTargetTile(mt.getId());
+		mc.setTargetPlayer(player);
+		mc.setAllTiles(lstTemp);
+		_chapters.push_back(mc);
+		clearPassedHu();
+
+		return true;
 	}
 }
