@@ -66,7 +66,7 @@ namespace NiuMa
 		int findSeatByPlayer(const std::string& playerId) const;
 		void fillHandCounts(int counts[2]) const;
 		void fillCardIds(const CardArray& cards, std::vector<int>& ids) const;
-		void startRound();
+		void startRound(bool advanceRound = true);
 		void dealCards();
 		void finishBidding(int landlordSeat, int score);
 		CallResult doCall(int seat, int score);

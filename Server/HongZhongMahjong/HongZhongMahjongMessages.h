@@ -64,20 +64,22 @@ namespace NiuMa
 		bool dianPao;
 		bool hasFetch;
 		int seat;
-		int roundState;
-		int disbandState;
-		int banker;
-		int leftTiles;
-		int handTileNums[4];
-		MahjongTile fetchTile;
-		MahjongTileArray handTiles;
+			int roundState;
+			int disbandState;
+			int banker;
+			int roundNo;
+			int roundCount;
+			int leftTiles;
+			int handTileNums[4];
+			MahjongTile fetchTile;
+			MahjongTileArray handTiles;
 		MahjongTileArray playedTiles[4];
 		MahjongChapterArray chapters[4];
 
-		MSGPACK_DEFINE_MAP(number, gold, diamond, diZhu, chi, dianPao, hasFetch,
-			seat, roundState, disbandState, banker, leftTiles, handTileNums,
-			fetchTile, handTiles, playedTiles, chapters);
-	};
+			MSGPACK_DEFINE_MAP(number, gold, diamond, diZhu, chi, dianPao, hasFetch,
+				seat, roundState, disbandState, banker, roundNo, roundCount, leftTiles, handTileNums,
+				fetchTile, handTiles, playedTiles, chapters);
+		};
 
 	/**
 	 * 开始新一局消息
@@ -96,11 +98,13 @@ namespace NiuMa
 
 		MSG_PACK_IMPL
 
-	public:
-		int banker;
+		public:
+			int banker;
+			int roundNo;
+			int roundCount;
 
-		MSGPACK_DEFINE_MAP(banker);
-	};
+			MSGPACK_DEFINE_MAP(banker, roundNo, roundCount);
+		};
 
 	/**
 	 * 结算数据消息
@@ -122,12 +126,14 @@ namespace NiuMa
 
 	public:
 		bool kick;
-		int64_t golds[4];
-		int winGolds[4];
-		MahjongSettlement data;
+			int64_t golds[4];
+			int winGolds[4];
+			MahjongTile birdTile;
+			int birdMultiplier;
+			MahjongSettlement data;
 
-		MSGPACK_DEFINE_MAP(kick, golds, winGolds, data);
-	};
+			MSGPACK_DEFINE_MAP(kick, golds, winGolds, birdTile, birdMultiplier, data);
+		};
 
 	/**
 	 * 通知解散投票消息

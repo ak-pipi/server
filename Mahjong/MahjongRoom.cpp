@@ -562,6 +562,12 @@ bool MahjongRoom::shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const Mahj
 	return true;
 }
 
+bool MahjongRoom::canCreateDianPaoOption(MahjongAvatar* pAvatar, const MahjongTile& mt, std::string& passed) const {
+	if (pAvatar == nullptr)
+		return false;
+	return canDianPao() && pAvatar->canHu(mt) && pAvatar->canDianPao(mt, passed) && shouldAllowDianPaoForAvatar(pAvatar, mt);
+}
+
 	bool MahjongRoom::executeHu() {
 		if (_acOps2[0].empty())
 			return false;
@@ -1037,7 +1043,7 @@ bool MahjongRoom::shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const Mahj
 			if (pAvatar == nullptr)
 				continue;
 			passed.clear();
-			if (canDianPao() && pAvatar->canHu(mt) && pAvatar->canDianPao(mt, passed) && shouldAllowDianPaoForAvatar(pAvatar, mt)) {
+			if (canCreateDianPaoOption(pAvatar, mt, passed)) {
 				tmp = _acOpIdAlloc.askForId();
 				if (tmp >= ACTION_OPTION_POOL_SIZE) {
 					LOG_ERROR("逻辑错误，动作id大于动作选项池大小");
@@ -1552,6 +1558,7 @@ bool MahjongRoom::shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const Mahj
 		MahjongGenre::TingPaiArray::const_iterator it = tingTiles.begin();
 		while (it != tingTiles.end()) {
 			msg.tiles.push_back(it->tile);
+			msg.styles.push_back(it->style);
 			++it;
 		}
 		msg.send(pAvatar->getSession());

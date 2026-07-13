@@ -12,13 +12,13 @@ namespace NiuMa
 {
 	DouDiZhuGameRule::DouDiZhuGameRule()
 		: _playerCount(2)
-		, _handCardCount(17)
+		, _handCardCount(20)
 		, _bottomCardCount(3)
 		, _baseScore(1)
+		, _roundCount(8)
 		, _callTimeout(15000)
 		, _autoPlayTimeout(20000)
 		, _maxRoundScore(0)
-		, _removeThreeAndFour(true)
 	{
 		_orderTable = new CardOrderTable();
 	}
@@ -65,11 +65,8 @@ namespace NiuMa
 	}
 
 	bool DouDiZhuGameRule::isDisapprovedCard(const PokerCard& c) const {
-		if (!_removeThreeAndFour)
-			return false;
-		int point = c.getPoint();
-		return point == static_cast<int>(PokerPoint::Three) ||
-			point == static_cast<int>(PokerPoint::Four);
+		(void)c;
+		return false;
 	}
 
 	bool DouDiZhuGameRule::isRocket(const CardArray& cards, PokerCard& officer) const {
@@ -356,11 +353,22 @@ namespace NiuMa
 
 		if (root.isMember("base_score") && root["base_score"].isInt())
 			_baseScore = std::max(1, root["base_score"].asInt());
+		if (root.isMember("round_count") && root["round_count"].isInt())
+			_roundCount = std::max(0, root["round_count"].asInt());
+		if (root.isMember("hand_card_count") && root["hand_card_count"].isInt())
+			_handCardCount = std::max(1, root["hand_card_count"].asInt());
+		if (root.isMember("bottom_card_count") && root["bottom_card_count"].isInt())
+			_bottomCardCount = std::max(0, root["bottom_card_count"].asInt());
 		if (root.isMember("call_timeout") && root["call_timeout"].isInt())
 			_callTimeout = std::max(5000, root["call_timeout"].asInt());
 		if (root.isMember("auto_play_timeout") && root["auto_play_timeout"].isInt())
 			_autoPlayTimeout = std::max(5000, root["auto_play_timeout"].asInt());
 		if (root.isMember("max_score") && root["max_score"].isInt())
 			_maxRoundScore = std::max(0, root["max_score"].asInt());
+
+		const int cardCount = 54 * getPackNums();
+		_bottomCardCount = std::min(_bottomCardCount, std::max(0, cardCount - _playerCount));
+		int maxHandCardCount = (cardCount - _bottomCardCount) / _playerCount;
+		_handCardCount = std::min(_handCardCount, std::max(1, maxHandCardCount));
 	}
 }

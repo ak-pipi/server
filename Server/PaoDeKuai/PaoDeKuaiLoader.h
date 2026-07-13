@@ -5,7 +5,6 @@
 #define _NIU_MA_PAODEKUAI_LOADER_H_
 
 #include "Venue/VenueLoader.h"
-#include "PaoDeKuaiRule.h"
 
 namespace NiuMa
 {
@@ -17,9 +16,6 @@ namespace NiuMa
 
 	public:
 		virtual Venue::Ptr load(const std::string& id) override;
-
-	private:
-		std::shared_ptr<PaoDeKuaiRule> _rule;
 	};
 }
 

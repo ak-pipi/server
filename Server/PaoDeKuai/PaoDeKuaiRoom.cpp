@@ -34,6 +34,16 @@ namespace NiuMa
 			return genre == static_cast<int>(PaoDeKuaiGenre::Bomb) ||
 				genre == static_cast<int>(PaoDeKuaiGenre::Rocket);
 		}
+
+		class Spade3DealFilter : public DealFilter
+		{
+		public:
+			virtual bool isOk(const PokerCard& c) const override
+			{
+				return c.getPoint() == static_cast<int>(PokerPoint::Three) &&
+					c.getSuit() == static_cast<int>(PokerSuit::Spade);
+			}
+		};
 	}
 
 	PaoDeKuaiRoom::PaoDeKuaiRoom(const std::shared_ptr<PaoDeKuaiRule>& rule,
@@ -320,6 +330,23 @@ namespace NiuMa
 
 	void PaoDeKuaiRoom::dealCards() {
 		int cardCount = _rule->getCardCount();
+		std::vector<int> seats;
+		for (int _si = 0; _si < 2; _si++) {
+			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+			if (avatar)
+				seats.push_back(_si);
+		}
+		if (seats.empty())
+			return;
+
+		int spade3Seat = seats[BaseUtils::randInt(0, static_cast<int>(seats.size()))];
+		PokerCard spade3;
+		bool hasReservedSpade3 = false;
+		if (_rule->getMustIncludeSpade3()) {
+			hasReservedSpade3 = _dealer.handOutCard(spade3, std::make_shared<Spade3DealFilter>());
+			if (!hasReservedSpade3)
+				ErrorS << "跑得快保底发黑桃3失败，场地Id: " << getId();
+		}
 
 		// 15张跑得快使用45张牌库，两人各发15张，剩余15张不参与本局。
 		int idx = 0;
@@ -328,10 +355,15 @@ namespace NiuMa
 			if (!avatar)
 				continue;
 			CardArray hand;
-			if (!_dealer.handOutCards(hand, cardCount)) {
+			if (hasReservedSpade3 && _si == spade3Seat)
+				hand.push_back(spade3);
+			int drawCount = cardCount - static_cast<int>(hand.size());
+			CardArray drawn;
+			if (!_dealer.handOutCards(drawn, drawCount)) {
 				ErrorS << "跑得快发牌失败，场地Id: " << getId() << ", 座位: " << _si;
 				continue;
 			}
+			hand.insert(hand.end(), drawn.begin(), drawn.end());
 			avatar->setCards(hand);
 			avatar->sortCards();
 
@@ -780,7 +812,7 @@ namespace NiuMa
 
 	// 消息处理
 	void PaoDeKuaiRoom::onSyncTable(const NetMessage::Ptr& netMsg) {
-		auto msg = std::dynamic_pointer_cast<MsgPaoDeKuaiSync>(netMsg);
+		auto msg = std::dynamic_pointer_cast<MsgPaoDeKuaiSync>(netMsg->getMessage());
 		if (!msg)
 			return;
 
@@ -836,7 +868,7 @@ namespace NiuMa
 		if (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount())
 			return;
 
-		auto msg = std::dynamic_pointer_cast<MsgPaoDeKuaiReady>(netMsg);
+		auto msg = std::dynamic_pointer_cast<MsgPaoDeKuaiReady>(netMsg->getMessage());
 		if (!msg)
 			return;
 
@@ -865,7 +897,7 @@ namespace NiuMa
 		if (_gameState != GameState::Playing)
 			return;
 
-		auto msg = std::dynamic_pointer_cast<MsgPaoDeKuaiPlay>(netMsg);
+		auto msg = std::dynamic_pointer_cast<MsgPaoDeKuaiPlay>(netMsg->getMessage());
 		if (!msg)
 			return;
 
@@ -973,18 +1005,16 @@ namespace NiuMa
 		msg->multiplier = _multiplier;
 		msg->spring = _spring;
 
-		int idx = 0;
 		for (int _si = 0; _si < 2; _si++) {
 			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
 			if (!avatar)
 				continue;
-			msg->scores[idx] = avatar->getRoundScore();
-			msg->winGolds[idx] = avatar->getWinGold();
+			msg->scores[_si] = avatar->getRoundScore();
+			msg->winGolds[_si] = avatar->getWinGold();
 			// 剩余手牌
 			const CardArray& cards = avatar->getCards();
 			for (auto& c : cards)
-				msg->remainCards[idx].push_back(c.getId());
-			idx++;
+				msg->remainCards[_si].push_back(c.getId());
 		}
 
 		sendMessageToAll(*msg);

@@ -126,6 +126,11 @@ namespace NiuMa
 		virtual bool shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const MahjongTile& mt) const override;
 
 		/**
+		 * 重写点炮动作创建：硬庄平胡允许抓炮，需绕过通用 canHu 缓存的旧口径。
+		 */
+		virtual bool canCreateDianPaoOption(MahjongAvatar* pAvatar, const MahjongTile& mt, std::string& passed) const override;
+
+		/**
 		 * 重写胡牌检测，添加天胡/天天胡/地胡检测（桃江麻将特有规则）
 		 */
 		virtual void doHu() override;
@@ -136,7 +141,7 @@ namespace NiuMa
 		int countMingZiInHand(MahjongAvatar* pAvatar) const;
 
 		/**
-		 * 统计玩家手牌中赖子牌的数量（用于天胡/天天胡检测）
+		 * 统计玩家当前手牌中赖子牌的数量
 		 */
 		int countLaiZiInHand(MahjongAvatar* pAvatar) const;
 
@@ -151,14 +156,21 @@ namespace NiuMa
 		bool isHeiTianHu(TaoJiangMahjongAvatar* avatar) const;
 
 		/**
+		 * 统计胡牌时赖子数量：手牌 + 当前胡牌牌，牌章不计入。
+		 */
+		int countLaiZiForHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool includeHuTile) const;
+
+		/**
 		 * 按桃江规则估算某次胡牌是否具备可点炮的大胡
 		 */
 		bool hasDianPaoDaHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& mt) const;
+		bool shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const MahjongTile& mt, bool huTileAsWildcard) const;
 
 		/**
 		 * 按当前手牌实时判断某张候选牌是否可胡，并补齐听牌缓存
 		 */
-		bool canHuWithCandidate(MahjongAvatar* avatar, const MahjongTile& mt, bool tileAlreadyInHand) const;
+		bool canHuWithCandidate(MahjongAvatar* avatar, const MahjongTile& mt, bool tileAlreadyInHand,
+			bool huTileAsWildcard = true) const;
 
 		/**
 		 * 确保候选胡牌进入听牌缓存，避免多轮换听后动作生成依赖旧缓存
@@ -166,9 +178,9 @@ namespace NiuMa
 		void ensureTingTile(MahjongAvatar* avatar, const MahjongTile& mt, MahjongGenre::HuStyle style) const;
 
 		/**
-		 * 根据大胡数量计算单份胡分（不含台桌分，台桌分在债务清算中乘）
+		 * 根据大胡数量、胡牌方式和硬庄计算单份胡分（不含台桌分，台桌分在债务清算中乘）
 		 */
-		int calcBaseHuScore(int daHuCount) const;
+		int calcBaseHuScore(int daHuCount, bool zimo, bool yingZhuang) const;
 
 		/**
 		 * 抢杠胡按开杠者可杠上花的分数计分

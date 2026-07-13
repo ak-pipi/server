@@ -12,10 +12,7 @@ namespace NiuMa
 {
 	PaoDeKuaiLoader::PaoDeKuaiLoader()
 		: VenueLoader(static_cast<int>(GameType::PaoDeKuai))
-	{
-		_rule = std::make_shared<PaoDeKuaiRule>();
-		_rule->initialise();
-	}
+	{}
 
 	PaoDeKuaiLoader::~PaoDeKuaiLoader() {}
 
@@ -65,8 +62,10 @@ namespace NiuMa
 			ErrorS << "加载跑得快游戏(Id: " << id << ")失败";
 			return nullptr;
 		}
+		std::shared_ptr<PaoDeKuaiRule> rule = std::make_shared<PaoDeKuaiRule>();
+		rule->initialise();
 		std::shared_ptr<PaoDeKuaiRoom> room = std::make_shared<PaoDeKuaiRoom>(
-			_rule, id, task->_number, task->_level, task->_ruleConfig, task->_districtId);
+			rule, id, task->_number, task->_level, task->_ruleConfig, task->_districtId);
 		return room;
 	}
 }

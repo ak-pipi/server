@@ -50,12 +50,16 @@ namespace NiuMa
 		bool isFirstPlay;
 		int roundNo;
 		int playerCount;
+		std::string number;
+		int level;
+		int baseScore;
+		int roundCount;
 		int handCounts[2];
 
 		MSGPACK_DEFINE_MAP(gameState, currentPlayer, mySeat, myCards, bottomCards,
 			landlordSeat, callStarter, highestBidSeat, highestBid, callTurn, callCount,
 			multiplier, lastPlayCards, lastPlaySeat, lastPlayGenre, isFirstPlay,
-			roundNo, playerCount, handCounts);
+			roundNo, playerCount, number, level, baseScore, roundCount, handCounts);
 	};
 
 	class MsgDouDiZhuReady : public MsgVenueInner {
@@ -76,9 +80,11 @@ namespace NiuMa
 		std::vector<int> cards;
 		int callStarter;
 		int roundNo;
+		int roundCount;
+		int baseScore;
 		int handCounts[2];
 
-		MSGPACK_DEFINE_MAP(cards, callStarter, roundNo, handCounts);
+		MSGPACK_DEFINE_MAP(cards, callStarter, roundNo, roundCount, baseScore, handCounts);
 	};
 
 	class MsgDouDiZhuCall : public MsgVenueInner {

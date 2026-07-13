@@ -337,8 +337,10 @@ namespace NiuMa
 	public:
 		// 听牌列表
 		MahjongTile::TileArray tiles;
+		// 听牌对应的胡牌样式，与 tiles 下标一一对应
+		std::vector<int> styles;
 
-		MSGPACK_DEFINE_MAP(tiles);
+		MSGPACK_DEFINE_MAP(tiles, styles);
 	};
 
 	/**

@@ -12,10 +12,7 @@ namespace NiuMa
 {
 	DouDiZhuLoader::DouDiZhuLoader()
 		: VenueLoader(static_cast<int>(GameType::DouDiZhu))
-	{
-		_rule = std::make_shared<DouDiZhuGameRule>();
-		_rule->initialise();
-	}
+	{}
 
 	DouDiZhuLoader::~DouDiZhuLoader() {}
 
@@ -57,6 +54,8 @@ namespace NiuMa
 			ErrorS << "加载斗地主游戏(Id: " << id << ")失败";
 			return nullptr;
 		}
-		return std::make_shared<DouDiZhuRoom>(_rule, id, task->_number, task->_level, task->_ruleConfig);
+		std::shared_ptr<DouDiZhuGameRule> rule = std::make_shared<DouDiZhuGameRule>();
+		rule->initialise();
+		return std::make_shared<DouDiZhuRoom>(rule, id, task->_number, task->_level, task->_ruleConfig);
 	}
 }

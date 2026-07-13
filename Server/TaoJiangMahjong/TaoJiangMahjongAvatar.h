@@ -18,19 +18,21 @@ namespace NiuMa
 		virtual void clear() override;
 		virtual int calcHuScore() const override;
 		virtual bool detectHuStyle(bool bZiMo, const MahjongTile& mt) override;
+		bool detectHuStyle(bool bZiMo, const MahjongTile& mt, bool huTileAsWildcard);
 
 		/**
-		 * 重写直杠检测：桃江麻将规则，没有听牌时不能直杠
+		 * 重写直杠检测：桃江麻将没有听牌时不能直杠。
+		 * 绝对规则：吃、碰、杠动作中的赖子只能按本身牌面使用，不能作为万能牌。
 		 */
 		virtual bool canZhiGang(const MahjongTile& mt) const override;
 
 		/**
-		 * 重写碰牌检测：桃江麻将规则，开杠后不能碰
+		 * 重写碰牌检测：开杠后不能碰；赖子不能补碰。
 		 */
 		virtual bool canPeng(const MahjongTile& mt, std::string& passed) const override;
 
 		/**
-		 * 重写吃牌检测：桃江麻将规则，开杠后不能吃
+		 * 重写吃牌检测：开杠后不能吃；赖子不能补顺吃牌。
 		 */
 		virtual bool canChi(const MahjongTile& mt, std::vector<std::pair<int, int> >& lstPairs) const override;
 
@@ -40,12 +42,18 @@ namespace NiuMa
 		virtual bool canHu(const MahjongTile& mt) const override;
 
 		/**
+		 * 桃江麻将过胡只限制同一张牌，不能挡住其他硬庄听口。
+		 */
+		virtual bool canDianPao(const MahjongTile& mt, std::string& passed) const override;
+
+		/**
 		 * 报听后只能打出本轮摸到的牌，不能换听
 		 */
 		virtual bool playTile(int id) override;
 
 		/**
-		 * 重写吃/碰执行：允许赖子参与吃碰组合
+		 * 重写吃/碰执行：保留桃江麻将开杠、报听限制；
+		 * 吃、碰、杠动作中的赖子只按本身牌面参与，禁止作为万能牌。
 		 */
 		virtual bool doChi(const MahjongTile& mt, int id1, int id2, int actionId, int player) override;
 		virtual bool doPeng(const MahjongTile& mt, int actionId, int player) override;

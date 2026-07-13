@@ -20,6 +20,8 @@ namespace NiuMa
 		, roundState(0)
 		, disbandState(0)
 		, banker(0)
+		, roundNo(0)
+		, roundCount(0)
 		, leftTiles(0)
 	{
 		for (int i = 0; i < 4; i++)
@@ -32,6 +34,8 @@ namespace NiuMa
 
 	MsgHZStartRound::MsgHZStartRound()
 		: banker(0)
+		, roundNo(0)
+		, roundCount(0)
 	{}
 
 	MsgHZStartRound::~MsgHZStartRound() {}
@@ -40,6 +44,7 @@ namespace NiuMa
 
 	MsgHZSettlement::MsgHZSettlement()
 		: kick(false)
+		, birdMultiplier(1)
 	{
 		for (int i = 0; i < 4; i++) {
 			golds[i] = 0LL;

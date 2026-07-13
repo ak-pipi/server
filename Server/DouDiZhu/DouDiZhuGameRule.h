@@ -54,10 +54,10 @@ namespace NiuMa
 		int getHandCardCount() const { return _handCardCount; }
 		int getBottomCardCount() const { return _bottomCardCount; }
 		int getBaseScore() const { return _baseScore; }
+		int getRoundCount() const { return _roundCount; }
 		int getCallTimeout() const { return _callTimeout; }
 		int getAutoPlayTimeout() const { return _autoPlayTimeout; }
 		int getMaxRoundScore() const { return _maxRoundScore; }
-		bool getRemoveThreeAndFour() const { return _removeThreeAndFour; }
 		void loadConfig(const std::string& ruleConfig);
 
 	private:
@@ -71,10 +71,10 @@ namespace NiuMa
 		int _handCardCount;
 		int _bottomCardCount;
 		int _baseScore;
+		int _roundCount;
 		int _callTimeout;
 		int _autoPlayTimeout;
 		int _maxRoundScore;
-		bool _removeThreeAndFour;
 	};
 }
 

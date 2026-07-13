@@ -195,8 +195,11 @@ namespace NiuMa
 			ids.push_back(c.getId());
 	}
 
-	void DouDiZhuRoom::startRound() {
-		_roundNo++;
+	void DouDiZhuRoom::startRound(bool advanceRound) {
+		if (advanceRound && _rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount())
+			return;
+		if (advanceRound || _roundNo <= 0)
+			_roundNo++;
 		_currentPlayer = -1;
 		_landlordSeat = -1;
 		_callStarter = (_roundNo - 1) % _rule->getPlayerCount();
@@ -273,7 +276,7 @@ namespace NiuMa
 			if (_highestBidSeat >= 0)
 				finishBidding(_highestBidSeat, _highestBid);
 			else
-				startRound();
+				startRound(false);
 			return CallResult::OK;
 		}
 		nextSeat = getNextSeat(seat);
@@ -401,7 +404,7 @@ namespace NiuMa
 	}
 
 	void DouDiZhuRoom::calculateScores(int winnerSeat) {
-		int score = _rule->getBaseScore() * std::max(1, _highestBid) * std::max(1, _multiplier);
+		int score = _rule->getBaseScore() * std::max(1, _multiplier);
 		if (_rule->getMaxRoundScore() > 0)
 			score = std::min(score, _rule->getMaxRoundScore());
 		for (int i = 0; i < 2; i++) {
@@ -469,6 +472,10 @@ namespace NiuMa
 		resp->isFirstPlay = _isFirstPlay;
 		resp->roundNo = _roundNo;
 		resp->playerCount = _rule->getPlayerCount();
+		resp->number = _number;
+		resp->level = _level;
+		resp->baseScore = _rule->getBaseScore();
+		resp->roundCount = _rule->getRoundCount();
 		fillHandCounts(resp->handCounts);
 		if (avatar) {
 			for (const PokerCard& c : avatar->getCards())
@@ -478,10 +485,13 @@ namespace NiuMa
 			fillCardIds(_bottomCards, resp->bottomCards);
 		fillCardIds(_lastPlayGenre.getCards(), resp->lastPlayCards);
 		resp->send(netMsg->getSession());
+		sendAvatars(netMsg->getSession());
 	}
 
 	void DouDiZhuRoom::onReady(const NetMessage::Ptr& netMsg) {
 		if (_gameState != GameState::None && _gameState != GameState::Ready)
+			return;
+		if (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount())
 			return;
 		std::shared_ptr<MsgPlayerSignature> msg = std::dynamic_pointer_cast<MsgPlayerSignature>(netMsg->getMessage());
 		if (!msg)
@@ -543,6 +553,8 @@ namespace NiuMa
 			msg->cards.push_back(c.getId());
 		msg->callStarter = _callStarter;
 		msg->roundNo = _roundNo;
+		msg->roundCount = _rule->getRoundCount();
+		msg->baseScore = _rule->getBaseScore();
 		fillHandCounts(msg->handCounts);
 		sendMessage(*msg, playerId);
 	}

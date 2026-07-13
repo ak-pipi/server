@@ -313,7 +313,7 @@ namespace NiuMa
 			return 2;
 		if (bomb1 && bomb2) {
 			// 同为炸弹比较主牌
-			return compareCard(pcg1.getOfficer(), pcg2.getOfficer());
+			return comparePoint(pcg1.getOfficer().getPoint(), pcg2.getOfficer().getPoint());
 		}
 
 		// 相同牌型比较主牌大小
@@ -330,7 +330,8 @@ namespace NiuMa
 				return 0;
 		}
 
-		return compareCard(pcg1.getOfficer(), pcg2.getOfficer());
+		// 跑得快按点数压牌，不使用花色大小。
+		return comparePoint(pcg1.getOfficer().getPoint(), pcg2.getOfficer().getPoint());
 	}
 
 	bool PaoDeKuaiRule::straightExcluded(const PokerCard& c) const {

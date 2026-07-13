@@ -34,6 +34,9 @@ namespace NiuMa
 		, isFirstPlay(true)
 		, roundNo(0)
 		, playerCount(2)
+		, level(0)
+		, baseScore(1)
+		, roundCount(8)
 	{
 		handCounts[0] = 0;
 		handCounts[1] = 0;
@@ -42,6 +45,8 @@ namespace NiuMa
 	MsgDouDiZhuDeal::MsgDouDiZhuDeal()
 		: callStarter(-1)
 		, roundNo(0)
+		, roundCount(8)
+		, baseScore(1)
 	{
 		handCounts[0] = 0;
 		handCounts[1] = 0;

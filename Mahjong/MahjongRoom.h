@@ -166,6 +166,12 @@ namespace NiuMa
 		 */
 		virtual bool shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const MahjongTile& mt) const;
 
+		/**
+		 * 判断是否为某个玩家创建点炮动作选项。默认使用通用麻将缓存判断，
+		 * 子类可覆写以加入实时胡牌或特殊胡牌限制。
+		 */
+		virtual bool canCreateDianPaoOption(MahjongAvatar* pAvatar, const MahjongTile& mt, std::string& passed) const;
+
 		// 是否提前结束(流局)
 		virtual bool earlyTermination() const;
 
