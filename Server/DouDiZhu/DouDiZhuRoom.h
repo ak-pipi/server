@@ -17,7 +17,8 @@ namespace NiuMa
 			const std::string& venueId,
 			const std::string& number,
 			int level,
-			const std::string& ruleConfig);
+			const std::string& ruleConfig,
+			int districtId = 0);
 		virtual ~DouDiZhuRoom();
 
 	private:
@@ -51,6 +52,8 @@ namespace NiuMa
 		virtual GameAvatar::Ptr createAvatar(const std::string& playerId, int seat, bool robot) const override;
 		virtual bool checkEnter(const std::string& playerId, std::string& errMsg, bool robot = false) const override;
 		virtual int checkLeave(const std::string& playerId, std::string& errMsg) const override;
+		virtual void getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const override;
+		virtual void onAvatarJoined(int seat, const std::string& playerId) override;
 		virtual void onAvatarLeaved(int seat, const std::string& playerId) override;
 		virtual void clean() override;
 
@@ -77,6 +80,8 @@ namespace NiuMa
 		void calculateScores(int winnerSeat);
 		void autoAction();
 		std::string playErrorText(PlayResult result) const;
+		void updateDistrictNotFull();
+		void recordDistrictPlayerTrack(const std::string& playerId);
 
 	private:
 		void onSyncTable(const NetMessage::Ptr& netMsg);
@@ -96,6 +101,7 @@ namespace NiuMa
 		std::string _ruleConfig;
 		std::string _number;
 		int _level;
+		int _districtId;
 		GameState _gameState;
 		time_t _stateTime;
 		int _roundNo;

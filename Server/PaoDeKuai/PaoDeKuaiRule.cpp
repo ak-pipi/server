@@ -41,7 +41,7 @@ namespace NiuMa
 		, _allowPass(true)
 		, _autoPlayTimeout(30000)
 		, _maxRoundScore(0)
-		, _mustIncludeSpade3(true)
+		, _mustIncludeSpade3(false)
 		, _springDouble(true)
 		, _forcePlayIfCanBeat(true)
 	{
@@ -185,15 +185,28 @@ namespace NiuMa
 			return static_cast<int>(PaoDeKuaiGenre::TripleOne);
 		}
 
-		// 三带二
-		if (n == 5 && pcg.carryM_N(3, 2)) {
-			pcg.setGenre(static_cast<int>(PaoDeKuaiGenre::TriplePair));
-			for (int i = 2; i < n; i++) {
-				if (cards[i].getPoint() == cards[i - 2].getPoint()) {
-					pcg.setOfficer(cards[i]);
+		// 三带二：跑得快三张可以任意带两张，不要求带对子。
+		if (n == 5) {
+			std::unordered_map<int, int> pointCounts = countPoints(cards);
+			int triplePoint = -1;
+			bool ok = true;
+			for (const auto& kv : pointCounts) {
+				if (kv.second == 3) {
+					if (triplePoint > 0) {
+						ok = false;
+						break;
+					}
+					triplePoint = kv.first;
+				}
+				else if (kv.second > 3) {
+					ok = false;
 					break;
 				}
 			}
+			if (!ok || triplePoint < 0)
+				return static_cast<int>(PaoDeKuaiGenre::Invalid);
+			pcg.setGenre(static_cast<int>(PaoDeKuaiGenre::TriplePair));
+			setOfficerByPoint(pcg, cards, triplePoint);
 			return static_cast<int>(PaoDeKuaiGenre::TriplePair);
 		}
 
@@ -418,6 +431,7 @@ namespace NiuMa
 
 		_playerCount = 2;
 		_cardCount = 15;
+		_mustIncludeSpade3 = false;
 		if (_baseScore < 1)
 			_baseScore = 1;
 		if (_roundCount < 0)

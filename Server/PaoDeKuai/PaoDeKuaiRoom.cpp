@@ -34,16 +34,6 @@ namespace NiuMa
 			return genre == static_cast<int>(PaoDeKuaiGenre::Bomb) ||
 				genre == static_cast<int>(PaoDeKuaiGenre::Rocket);
 		}
-
-		class Spade3DealFilter : public DealFilter
-		{
-		public:
-			virtual bool isOk(const PokerCard& c) const override
-			{
-				return c.getPoint() == static_cast<int>(PokerPoint::Three) &&
-					c.getSuit() == static_cast<int>(PokerSuit::Spade);
-			}
-		};
 	}
 
 	PaoDeKuaiRoom::PaoDeKuaiRoom(const std::shared_ptr<PaoDeKuaiRule>& rule,
@@ -220,44 +210,21 @@ namespace NiuMa
 	}
 
 	int PaoDeKuaiRoom::determineFirstPlayer() const {
-		// 首局随机选一个玩家出牌
-		// 后续由上一局赢家先出
-		// 如果配置了must_include_spade3，则持有黑桃3的玩家先出
-		if (_rule->getMustIncludeSpade3()) {
-			for (int _si = 0; _si < 2; _si++) {
-				auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
-				if (!avatar)
-					continue;
-				if (hasSpade3(_si))
-					return _si;
-			}
+		std::vector<int> seats;
+		for (int _si = 0; _si < 2; _si++) {
+			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+			if (avatar)
+				seats.push_back(_si);
 		}
-		// 默认从座位0开始
-		return 0;
-	}
-
-	bool PaoDeKuaiRoom::hasSpade3(int seat) const {
-		auto avatar = getAvatar(seat);
-		if (!avatar)
-			return false;
-		const CardArray& cards = avatar->getCards();
-		for (auto& c : cards) {
-			if (c.getPoint() == static_cast<int>(PokerPoint::Three) &&
-				c.getSuit() == static_cast<int>(PokerSuit::Spade))
-				return true;
+		if (seats.empty())
+			return 0;
+		if (_roundNo <= 1)
+			return seats[BaseUtils::randInt(0, static_cast<int>(seats.size()))];
+		for (int seat : seats) {
+			if (seat == _banker)
+				return seat;
 		}
-		return false;
-	}
-
-	bool PaoDeKuaiRoom::cardsContainSpade3(const std::vector<int>& cardIds) const {
-		for (int id : cardIds) {
-			PokerCard c;
-			_dealer.getCard(c, id);
-			if (c.getPoint() == static_cast<int>(PokerPoint::Three) &&
-				c.getSuit() == static_cast<int>(PokerSuit::Spade))
-				return true;
-		}
-		return false;
+		return seats[0];
 	}
 
 	void PaoDeKuaiRoom::startRound() {
@@ -271,7 +238,6 @@ namespace NiuMa
 		_playback = PaoDeKuaiPlaybackData();
 		_playback.venueId = getId();
 		_playback.roundNo = _roundNo;
-		_playback.banker = _banker;
 		_playback.playerCount = _rule->getPlayerCount();
 		int idx = 0;
 		for (int _si = 0; _si < 2; _si++) {
@@ -307,6 +273,8 @@ namespace NiuMa
 
 		// 确定首出玩家
 		_currentPlayer = determineFirstPlayer();
+		_banker = _currentPlayer;
+		_playback.banker = _banker;
 		_lastPlaySeat = -1;
 		_isFirstPlay = true;
 		_lastPlayGenre.clear();
@@ -330,24 +298,6 @@ namespace NiuMa
 
 	void PaoDeKuaiRoom::dealCards() {
 		int cardCount = _rule->getCardCount();
-		std::vector<int> seats;
-		for (int _si = 0; _si < 2; _si++) {
-			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
-			if (avatar)
-				seats.push_back(_si);
-		}
-		if (seats.empty())
-			return;
-
-		int spade3Seat = seats[BaseUtils::randInt(0, static_cast<int>(seats.size()))];
-		PokerCard spade3;
-		bool hasReservedSpade3 = false;
-		if (_rule->getMustIncludeSpade3()) {
-			hasReservedSpade3 = _dealer.handOutCard(spade3, std::make_shared<Spade3DealFilter>());
-			if (!hasReservedSpade3)
-				ErrorS << "跑得快保底发黑桃3失败，场地Id: " << getId();
-		}
-
 		// 15张跑得快使用45张牌库，两人各发15张，剩余15张不参与本局。
 		int idx = 0;
 		for (int _si = 0; _si < 2; _si++) {
@@ -355,11 +305,8 @@ namespace NiuMa
 			if (!avatar)
 				continue;
 			CardArray hand;
-			if (hasReservedSpade3 && _si == spade3Seat)
-				hand.push_back(spade3);
-			int drawCount = cardCount - static_cast<int>(hand.size());
 			CardArray drawn;
-			if (!_dealer.handOutCards(drawn, drawCount)) {
+			if (!_dealer.handOutCards(drawn, cardCount)) {
 				ErrorS << "跑得快发牌失败，场地Id: " << getId() << ", 座位: " << _si;
 				continue;
 			}
@@ -426,10 +373,6 @@ namespace NiuMa
 		if (g == static_cast<int>(PaoDeKuaiGenre::Invalid))
 			return PlayResult::InvalidGenre;
 
-		// 首出必须包含黑桃3
-		if (!_hasFirstPlayed && _rule->getMustIncludeSpade3() && !cardsContainSpade3(cardIds))
-			return PlayResult::MustIncludeSpade3;
-
 		// 压牌检查
 		if (!_isFirstPlay) {
 			int cmp = _rule->compareGenre(genre, _lastPlayGenre);
@@ -479,7 +422,6 @@ namespace NiuMa
 		if (n <= 0 || n > 20)
 			return false;
 
-		bool requireSpade3 = firstPlay && !_hasFirstPlayed && _rule->getMustIncludeSpade3();
 		PokerGenre bestGenre;
 		std::vector<int> bestIds;
 		int total = 1 << n;
@@ -487,19 +429,13 @@ namespace NiuMa
 		for (int mask = 1; mask < total; mask++) {
 			CardArray cards;
 			std::vector<int> ids;
-			bool hasSpade3Card = false;
 			for (int i = 0; i < n; i++) {
 				if ((mask & (1 << i)) == 0)
 					continue;
 				const PokerCard& c = hand[i];
 				cards.push_back(c);
 				ids.push_back(c.getId());
-				if (c.getPoint() == static_cast<int>(PokerPoint::Three) &&
-					c.getSuit() == static_cast<int>(PokerSuit::Spade))
-					hasSpade3Card = true;
 			}
-			if (requireSpade3 && !hasSpade3Card)
-				continue;
 			std::sort(cards.begin(), cards.end(), comp);
 			PokerGenre genre;
 			genre.setCards(cards, _rule);
@@ -932,9 +868,6 @@ namespace NiuMa
 					break;
 				case PlayResult::CannotBeat:
 					resp->errMsg = "无法大过上家";
-					break;
-				case PlayResult::MustIncludeSpade3:
-					resp->errMsg = "首出必须包含黑桃3";
 					break;
 				case PlayResult::CannotPass:
 					resp->errMsg = "有牌能大过上家，不能过牌";

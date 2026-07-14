@@ -23,6 +23,7 @@ namespace NiuMa
 		, currentPlayer(-1)
 		, mySeat(-1)
 		, landlordSeat(-1)
+		, banker(-1)
 		, callStarter(-1)
 		, highestBidSeat(-1)
 		, highestBid(0)
@@ -43,7 +44,8 @@ namespace NiuMa
 	}
 
 	MsgDouDiZhuDeal::MsgDouDiZhuDeal()
-		: callStarter(-1)
+		: banker(-1)
+		, callStarter(-1)
 		, roundNo(0)
 		, roundCount(8)
 		, baseScore(1)

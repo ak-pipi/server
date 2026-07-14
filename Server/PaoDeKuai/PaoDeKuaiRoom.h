@@ -46,7 +46,6 @@ namespace NiuMa
 			InvalidCards,	// 不是你的手牌
 			InvalidGenre,	// 牌型不合法
 			CannotBeat,		// 无法大过上家
-			MustIncludeSpade3, // 首出必须包含黑桃3
 			CannotPass		// 有牌能大过上家，不能过牌
 		};
 
@@ -93,7 +92,7 @@ namespace NiuMa
 		// 是否为新一轮首出
 		bool _isFirstPlay;
 
-		// 是否已经出过牌（首次出牌黑桃3检查用）
+		// 是否已经出过牌（用于恢复新一轮首出状态）
 		bool _hasFirstPlayed;
 
 		// 炸弹翻倍次数
@@ -169,12 +168,6 @@ namespace NiuMa
 
 		// 当前牌型是否优于已选自动牌型
 		bool betterAutoPlay(const PokerGenre& candidate, const PokerGenre& current, bool firstPlay) const;
-
-		// 检查手牌中是否有黑桃3
-		bool hasSpade3(int seat) const;
-
-		// 出牌是否包含黑桃3
-		bool cardsContainSpade3(const std::vector<int>& cardIds) const;
 
 		// 结算
 		void settle();

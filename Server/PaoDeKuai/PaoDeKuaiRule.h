@@ -86,7 +86,7 @@ namespace NiuMa
 		// 封顶分数
 		int getMaxRoundScore() const { return _maxRoundScore; }
 
-		// 首出规则：是否必须出包含黑桃3的牌
+		// 兼容旧首出配置字段；当前固定为false
 		bool getMustIncludeSpade3() const { return _mustIncludeSpade3; }
 
 		// 输家一张未出是否翻倍
@@ -126,7 +126,7 @@ namespace NiuMa
 		// 封顶分数
 		int _maxRoundScore;
 
-		// 首出必须包含黑桃3
+		// 兼容旧配置字段；当前固定为false
 		bool _mustIncludeSpade3;
 
 		// 输家一张未出翻倍

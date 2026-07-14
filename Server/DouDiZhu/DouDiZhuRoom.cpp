@@ -5,10 +5,15 @@
 #include "GameDefines.h"
 #include "Game/WalletEventTask.h"
 #include "Network/MsgSession.h"
+#include "Base/BaseUtils.h"
 #include "Base/Log.h"
+#include "Constant/RedisKeys.h"
+#include "Redis/RedisPool.h"
 
 #include <algorithm>
 #include <chrono>
+#include <json/json.h>
+#include <random>
 #include <sstream>
 
 namespace NiuMa
@@ -17,20 +22,22 @@ namespace NiuMa
 		const std::string& venueId,
 		const std::string& number,
 		int level,
-		const std::string& ruleConfig)
+		const std::string& ruleConfig,
+		int districtId)
 		: GameRoom(venueId, static_cast<int>(GameType::DouDiZhu), 2)
 		, _rule(rule)
 		, _dealer(rule)
 		, _ruleConfig(ruleConfig)
 		, _number(number)
 		, _level(level)
+		, _districtId(districtId)
 		, _gameState(GameState::None)
 		, _stateTime(0)
 		, _roundNo(0)
-		, _banker(0)
+		, _banker(-1)
 		, _currentPlayer(-1)
 		, _landlordSeat(-1)
-		, _callStarter(0)
+		, _callStarter(-1)
 		, _callTurn(-1)
 		, _highestBidSeat(-1)
 		, _highestBid(0)
@@ -71,11 +78,41 @@ namespace NiuMa
 		return 0;
 	}
 
+	void DouDiZhuRoom::getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const {
+		if (!avatar)
+			return;
+		int64_t gold = avatar->getCashPledge() + avatar->getGold();
+		Json::Value tmp(Json::objectValue);
+		tmp["gold"] = static_cast<Json::Int64>(gold);
+		tmp["diamond"] = static_cast<Json::Int64>(0);
+		if (!avatar->isOffline()) {
+			Session::Ptr session = avatar->getSession();
+			if (session)
+				tmp["ip"] = session->getRemoteIp();
+		}
+		tmp["authorize"] = avatar->isAuthorize();
+		int winNum = 0;
+		int loseNum = 0;
+		int drawNum = 0;
+		avatar->getScoreboard(winNum, loseNum, drawNum);
+		tmp["winNum"] = winNum;
+		tmp["loseNum"] = loseNum;
+		tmp["drawNum"] = drawNum;
+		std::string json = tmp.toStyledString();
+		BaseUtils::encodeBase64(base64, json.data(), static_cast<int>(json.size()));
+	}
+
+	void DouDiZhuRoom::onAvatarJoined(int seat, const std::string& playerId) {
+		GameRoom::onAvatarJoined(seat, playerId);
+		updateDistrictNotFull();
+	}
+
 	void DouDiZhuRoom::onAvatarLeaved(int seat, const std::string& playerId) {
 		(void)seat;
-		(void)playerId;
 		if (getAvatarCount() == 0)
 			setState(GameState::None);
+		updateDistrictNotFull();
+		recordDistrictPlayerTrack(playerId);
 	}
 
 	void DouDiZhuRoom::clean() {
@@ -83,6 +120,8 @@ namespace NiuMa
 		_roundNo = 0;
 		_currentPlayer = -1;
 		_landlordSeat = -1;
+		_banker = -1;
+		_callStarter = -1;
 		_callTurn = -1;
 		_highestBidSeat = -1;
 		_highestBid = 0;
@@ -202,7 +241,11 @@ namespace NiuMa
 			_roundNo++;
 		_currentPlayer = -1;
 		_landlordSeat = -1;
-		_callStarter = (_roundNo - 1) % _rule->getPlayerCount();
+		static std::mt19937 rng(static_cast<unsigned>(
+			std::chrono::system_clock::now().time_since_epoch().count()));
+		std::uniform_int_distribution<int> seatDist(0, _rule->getPlayerCount() - 1);
+		_banker = seatDist(rng);
+		_callStarter = _banker;
 		_callTurn = _callStarter;
 		_highestBidSeat = -1;
 		_highestBid = 0;
@@ -235,7 +278,8 @@ namespace NiuMa
 		}
 		_autoActionTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) +
 			_rule->getCallTimeout() / 1000;
-		InfoS << "斗地主开始叫地主，场地: " << getId() << "，局号: " << _roundNo;
+		InfoS << "斗地主开始叫地主，场地: " << getId() << "，局号: " << _roundNo
+			<< "，庄家: " << _banker;
 	}
 
 	void DouDiZhuRoom::dealCards() {
@@ -399,7 +443,11 @@ namespace NiuMa
 				WalletEventTask::publish(avatar->getPlayerId(), "GAME_LOSE", -winGold, "DouDiZhu", getId(), "斗地主输掉金币");
 			avatar->setReady(false);
 		}
-		_banker = winnerSeat;
+		_banker = -1;
+		_landlordSeat = -1;
+		_callStarter = -1;
+		_callTurn = -1;
+		_currentPlayer = -1;
 		setState(GameState::Ready);
 	}
 
@@ -450,6 +498,29 @@ namespace NiuMa
 		}
 	}
 
+	void DouDiZhuRoom::updateDistrictNotFull() {
+		if (_districtId == 0)
+			return;
+		std::string redisKey = RedisKeys::DISTRICT_NOT_FULL_VENUES + std::to_string(_districtId);
+		if (isFull())
+			RedisPool::getSingleton().hdel(redisKey, getId());
+		else
+			RedisPool::getSingleton().hset(redisKey, getId(), getAvatarCount());
+	}
+
+	void DouDiZhuRoom::recordDistrictPlayerTrack(const std::string& playerId) {
+		if (_districtId == 0 || playerId.empty())
+			return;
+		std::string redisKey = RedisKeys::DISTRICT_PLAYER_TRACK;
+		std::string::size_type pos = redisKey.find("{0}");
+		if (pos != std::string::npos)
+			redisKey.replace(pos, 3, std::to_string(_districtId));
+		pos = redisKey.find("{1}");
+		if (pos != std::string::npos)
+			redisKey.replace(pos, 3, playerId);
+		RedisPool::getSingleton().hset(redisKey, getId(), BaseUtils::getCurrentMillisecond());
+	}
+
 	void DouDiZhuRoom::onSyncTable(const NetMessage::Ptr& netMsg) {
 		std::shared_ptr<MsgDouDiZhuSync> msg = std::dynamic_pointer_cast<MsgDouDiZhuSync>(netMsg->getMessage());
 		if (!msg || !netMsg->getSession())
@@ -461,6 +532,7 @@ namespace NiuMa
 		resp->currentPlayer = _currentPlayer;
 		resp->mySeat = seat;
 		resp->landlordSeat = _landlordSeat;
+		resp->banker = _banker;
 		resp->callStarter = _callStarter;
 		resp->highestBidSeat = _highestBidSeat;
 		resp->highestBid = _highestBid;
@@ -551,6 +623,7 @@ namespace NiuMa
 		std::shared_ptr<MsgDouDiZhuDeal> msg = std::make_shared<MsgDouDiZhuDeal>();
 		for (const PokerCard& c : avatar->getCards())
 			msg->cards.push_back(c.getId());
+		msg->banker = _banker;
 		msg->callStarter = _callStarter;
 		msg->roundNo = _roundNo;
 		msg->roundCount = _rule->getRoundCount();
