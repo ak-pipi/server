@@ -50,6 +50,7 @@ namespace NiuMa
 			virtual void notifyFetchTile(MahjongAvatar* pAvatar, bool bBack) override;
 
 		private:
+			static int resolvePlayerCount(const std::string& ruleConfig);
 			void parseRuleConfig(const std::string& ruleConfig);
 		void onSyncMahjong(const NetMessage::Ptr& netMsg);
 		void onPlayerReady(const NetMessage::Ptr& netMsg);

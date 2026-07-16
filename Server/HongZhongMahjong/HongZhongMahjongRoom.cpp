@@ -27,7 +27,7 @@
 namespace NiuMa
 {
 	HongZhongMahjongRoom::HongZhongMahjongRoom(const std::string& venueId, const std::string& number, int level, const std::string& ruleConfig)
-		: MahjongRoom(std::make_shared<HongZhongMahjongRule>(), venueId, static_cast<int>(GameType::HongZhongMahjong))
+		: MahjongRoom(std::make_shared<HongZhongMahjongRule>(), venueId, static_cast<int>(GameType::HongZhongMahjong), resolvePlayerCount(ruleConfig))
 		, _number(number)
 		, _level(level)
 		, _roundState(StageState::NotStarted)
@@ -79,6 +79,10 @@ namespace NiuMa
 
 	HongZhongMahjongRoom::~HongZhongMahjongRoom()
 	{}
+
+	int HongZhongMahjongRoom::resolvePlayerCount(const std::string&) {
+		return 2;
+	}
 
 	void HongZhongMahjongRoom::parseRuleConfig(const std::string& ruleConfig) {
 		Json::Reader reader;
@@ -232,6 +236,7 @@ namespace NiuMa
 		msg.roundState = static_cast<int>(_roundState);
 		msg.disbandState = static_cast<int>(_disbandState);
 		msg.banker = _banker;
+		msg.playerCount = getMaxPlayerNums();
 		msg.roundNo = _roundNo;
 		msg.roundCount = _roundCount;
 		msg.leftTiles = getHongZhongTileLeft();
@@ -342,6 +347,7 @@ namespace NiuMa
 
 		MsgHZStartRound msg;
 		msg.banker = _banker;
+		msg.playerCount = getMaxPlayerNums();
 		msg.roundNo = _roundNo;
 		msg.roundCount = _roundCount;
 		std::ostringstream os;

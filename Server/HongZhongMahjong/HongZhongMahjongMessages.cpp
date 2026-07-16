@@ -20,6 +20,7 @@ namespace NiuMa
 		, roundState(0)
 		, disbandState(0)
 		, banker(0)
+		, playerCount(2)
 		, roundNo(0)
 		, roundCount(0)
 		, leftTiles(0)
@@ -34,6 +35,7 @@ namespace NiuMa
 
 	MsgHZStartRound::MsgHZStartRound()
 		: banker(0)
+		, playerCount(2)
 		, roundNo(0)
 		, roundCount(0)
 	{}

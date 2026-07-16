@@ -53,6 +53,8 @@ namespace NiuMa
 
 	MsgPaoDeKuaiSettlement::MsgPaoDeKuaiSettlement()
 		: winnerSeat(-1)
+		, roundNo(0)
+		, roundCount(8)
 		, baseScore(1)
 		, bombCount(0)
 		, multiplier(1)

@@ -286,6 +286,12 @@ namespace NiuMa
 		// 各玩家剩余手牌
 		std::vector<int> remainCards[2];
 
+		// 局号
+		int roundNo;
+
+		// 总局数
+		int roundCount;
+
 		// 底注
 		int baseScore;
 
@@ -299,7 +305,7 @@ namespace NiuMa
 		bool spring;
 
 		MSGPACK_DEFINE_MAP(winnerSeat, scores, winGolds, remainCards,
-			baseScore, bombCount, multiplier, spring);
+			roundNo, roundCount, baseScore, bombCount, multiplier, spring);
 	};
 }
 

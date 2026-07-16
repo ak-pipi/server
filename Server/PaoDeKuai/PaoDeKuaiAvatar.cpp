@@ -144,7 +144,7 @@ namespace NiuMa
 	void PaoDeKuaiAvatar::combineStraightPair() {
 		int maxOrder = 11;
 		for (int start = 0; start <= maxOrder; start++) {
-			for (int len = 3; len <= maxOrder - start + 1; len++) {
+			for (int len = 2; len <= maxOrder - start + 1; len++) {
 				if (start + len - 1 > maxOrder)
 					break;
 				bool ok = true;

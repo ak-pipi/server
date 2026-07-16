@@ -67,6 +67,7 @@ namespace NiuMa
 			int roundState;
 			int disbandState;
 			int banker;
+			int playerCount;
 			int roundNo;
 			int roundCount;
 			int leftTiles;
@@ -77,7 +78,7 @@ namespace NiuMa
 		MahjongChapterArray chapters[4];
 
 			MSGPACK_DEFINE_MAP(number, gold, diamond, diZhu, chi, dianPao, hasFetch,
-				seat, roundState, disbandState, banker, roundNo, roundCount, leftTiles, handTileNums,
+				seat, roundState, disbandState, banker, playerCount, roundNo, roundCount, leftTiles, handTileNums,
 				fetchTile, handTiles, playedTiles, chapters);
 		};
 
@@ -100,10 +101,11 @@ namespace NiuMa
 
 		public:
 			int banker;
+			int playerCount;
 			int roundNo;
 			int roundCount;
 
-			MSGPACK_DEFINE_MAP(banker, roundNo, roundCount);
+			MSGPACK_DEFINE_MAP(banker, playerCount, roundNo, roundCount);
 		};
 
 	/**

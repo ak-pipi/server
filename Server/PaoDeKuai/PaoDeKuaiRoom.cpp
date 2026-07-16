@@ -933,6 +933,8 @@ namespace NiuMa
 	void PaoDeKuaiRoom::notifySettlement(int winnerSeat) {
 		auto msg = std::make_shared<MsgPaoDeKuaiSettlement>();
 		msg->winnerSeat = winnerSeat;
+		msg->roundNo = _roundNo;
+		msg->roundCount = _rule->getRoundCount();
 		msg->baseScore = _rule->getBaseScore();
 		msg->bombCount = _bombCount;
 		msg->multiplier = _multiplier;

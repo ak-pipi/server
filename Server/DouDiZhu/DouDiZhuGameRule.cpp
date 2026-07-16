@@ -12,12 +12,12 @@ namespace NiuMa
 {
 	DouDiZhuGameRule::DouDiZhuGameRule()
 		: _playerCount(2)
-		, _handCardCount(20)
+		, _handCardCount(17)
 		, _bottomCardCount(3)
 		, _baseScore(1)
 		, _roundCount(8)
 		, _callTimeout(15000)
-		, _autoPlayTimeout(20000)
+		, _autoPlayTimeout(180000)
 		, _maxRoundScore(0)
 	{
 		_orderTable = new CardOrderTable();

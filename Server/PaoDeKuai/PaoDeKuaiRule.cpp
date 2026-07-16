@@ -39,7 +39,7 @@ namespace NiuMa
 		, _bombDouble(true)
 		, _bombScore(10)
 		, _allowPass(true)
-		, _autoPlayTimeout(30000)
+		, _autoPlayTimeout(180000)
 		, _maxRoundScore(0)
 		, _mustIncludeSpade3(false)
 		, _springDouble(true)
@@ -165,8 +165,8 @@ namespace NiuMa
 			return static_cast<int>(PaoDeKuaiGenre::Straight);
 		}
 
-		// 连对（3对及以上连续对子）
-		if (n >= 6 && n % 2 == 0 && straightPair(cards)) {
+		// 连对（2对及以上连续对子）
+		if (n >= 4 && n % 2 == 0 && straightPair(cards)) {
 			pcg.setGenre(static_cast<int>(PaoDeKuaiGenre::StraightPair));
 			pcg.setOfficer(cards[n - 1]);
 			return static_cast<int>(PaoDeKuaiGenre::StraightPair);
@@ -289,7 +289,7 @@ namespace NiuMa
 		case PaoDeKuaiGenre::Straight:
 			return 5; // 最少5张
 		case PaoDeKuaiGenre::StraightPair:
-			return 6; // 最少3对
+			return 4; // 最少2对
 		case PaoDeKuaiGenre::Bomb:
 			return 4;
 		case PaoDeKuaiGenre::Rocket:
@@ -380,7 +380,7 @@ namespace NiuMa
 
 	bool PaoDeKuaiRule::straightPair(const CardArray& cards) const {
 		int n = static_cast<int>(cards.size());
-		if (n < 6 || n % 2 != 0)
+		if (n < 4 || n % 2 != 0)
 			return false;
 		for (auto& c : cards) {
 			if (straightPairExcluded(c))

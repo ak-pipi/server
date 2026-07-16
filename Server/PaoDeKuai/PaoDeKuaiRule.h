@@ -20,7 +20,7 @@ namespace NiuMa
 		TripleOne = 4,		// 三带一
 		TriplePair = 5,		// 三带二
 		Straight = 6,		// 顺子（5+张连续）
-		StraightPair = 7,	// 连对（3+对连续）
+		StraightPair = 7,	// 连对（2+对连续）
 		Plane = 8,			// 飞机不带
 		PlaneOne = 9,		// 飞机带单
 		PlanePair = 10,		// 飞机带对
