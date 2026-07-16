@@ -56,11 +56,12 @@ namespace NiuMa
 		int baseScore;
 		int roundCount;
 		int handCounts[2];
+		std::vector<AvatarInfo> avatars;
 
 		MSGPACK_DEFINE_MAP(gameState, currentPlayer, mySeat, myCards, bottomCards,
 			landlordSeat, banker, callStarter, highestBidSeat, highestBid, callTurn, callCount,
 			multiplier, lastPlayCards, lastPlaySeat, lastPlayGenre, isFirstPlay,
-			roundNo, playerCount, number, level, baseScore, roundCount, handCounts);
+			roundNo, playerCount, number, level, baseScore, roundCount, handCounts, avatars);
 	};
 
 	class MsgDouDiZhuReady : public MsgVenueInner {

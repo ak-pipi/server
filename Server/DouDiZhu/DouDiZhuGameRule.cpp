@@ -370,5 +370,7 @@ namespace NiuMa
 		_bottomCardCount = std::min(_bottomCardCount, std::max(0, cardCount - _playerCount));
 		int maxHandCardCount = (cardCount - _bottomCardCount) / _playerCount;
 		_handCardCount = std::min(_handCardCount, std::max(1, maxHandCardCount));
+		if (_playerCount == 2)
+			_handCardCount = 17;
 	}
 }

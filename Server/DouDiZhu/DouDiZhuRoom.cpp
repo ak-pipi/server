@@ -549,6 +549,21 @@ namespace NiuMa
 		resp->baseScore = _rule->getBaseScore();
 		resp->roundCount = _rule->getRoundCount();
 		fillHandCounts(resp->handCounts);
+		for (int i = 0; i < _rule->getPlayerCount(); i++) {
+			std::shared_ptr<DouDiZhuAvatar> item = getAvatar(i);
+			if (!item)
+				continue;
+			AvatarInfo info;
+			info.playerId = item->getPlayerId();
+			info.nickname = item->getNickname();
+			info.headUrl = item->getHeadUrl();
+			info.seat = item->getSeat();
+			info.sex = item->getSex();
+			info.ready = item->isReady();
+			info.offline = item->isOffline();
+			getAvatarExtraInfo(item, info.base64);
+			resp->avatars.push_back(info);
+		}
 		if (avatar) {
 			for (const PokerCard& c : avatar->getCards())
 				resp->myCards.push_back(c.getId());

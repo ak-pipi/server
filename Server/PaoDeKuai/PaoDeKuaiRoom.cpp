@@ -775,6 +775,16 @@ namespace NiuMa
 			if (!avatar)
 				continue;
 			resp->remainCounts[_si] = avatar->getCardNums();
+			AvatarInfo info;
+			info.playerId = avatar->getPlayerId();
+			info.nickname = avatar->getNickname();
+			info.headUrl = avatar->getHeadUrl();
+			info.seat = avatar->getSeat();
+			info.sex = avatar->getSex();
+			info.ready = avatar->isReady();
+			info.offline = avatar->isOffline();
+			getAvatarExtraInfo(avatar, info.base64);
+			resp->avatars.push_back(info);
 			if (avatar->getPlayerId() == playerId) {
 				resp->mySeat = _si;
 				resp->currentPlayer = _currentPlayer;

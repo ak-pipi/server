@@ -110,9 +110,12 @@ namespace NiuMa
 		// 各玩家剩余手牌数量
 		int remainCounts[2];
 
+		// 房间内玩家信息
+		std::vector<AvatarInfo> avatars;
+
 		MSGPACK_DEFINE_MAP(gameState, currentPlayer, mySeat, myCards, lastPlayCards,
 			lastPlaySeat, lastPlayGenre, isFirstPlay, roundNo, banker, playerCount,
-			number, level, baseScore, roundCount, bombCount, multiplier, remainCounts);
+			number, level, baseScore, roundCount, bombCount, multiplier, remainCounts, avatars);
 	};
 
 	/**
