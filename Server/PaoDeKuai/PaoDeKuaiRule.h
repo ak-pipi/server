@@ -22,8 +22,8 @@ namespace NiuMa
 		Straight = 6,		// 顺子（5+张连续）
 		StraightPair = 7,	// 连对（2+对连续）
 		Plane = 8,			// 飞机不带
-		PlaneOne = 9,		// 飞机带单
-		PlanePair = 10,		// 飞机带对
+		PlaneOne = 9,		// 飞机带一倍数量翅膀
+		PlanePair = 10,		// 飞机带两倍数量翅膀，翅膀可为任意牌
 		Bomb = 11,			// 炸弹
 		Rocket = 12			// 王炸（双王）
 	};

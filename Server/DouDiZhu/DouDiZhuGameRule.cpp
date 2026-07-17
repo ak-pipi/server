@@ -154,7 +154,8 @@ namespace NiuMa
 					ok = false;
 					break;
 				}
-				if (wingCardNums == 2 && item.second != 0 && item.second != 2) {
+				if (wingCardNums == 2 && item.second != 0 &&
+					(item.second != 2 || item.first == static_cast<int>(PokerPoint::Joker))) {
 					ok = false;
 					break;
 				}
@@ -191,7 +192,7 @@ namespace NiuMa
 			for (const auto& item : counts) {
 				if (item.first == fourPoint)
 					continue;
-				if (item.second != 2)
+				if (item.second != 2 || item.first == static_cast<int>(PokerPoint::Joker))
 					return false;
 			}
 		}
@@ -236,7 +237,8 @@ namespace NiuMa
 			pcg.setOfficer(officer);
 			return static_cast<int>(DouDiZhuGenre::TripleOne);
 		}
-		if (nums == 5 && pcg.carryM_N(3, 2) && PokerUtilities::rfindSamePointN(cards, officer, 3)) {
+		if (nums == 5 && pcg.carryM_N(3, 2) && PokerUtilities::rfindSamePointN(cards, officer, 3) &&
+			!pcg.hasPoint(static_cast<int>(PokerPoint::Joker))) {
 			pcg.setGenre(static_cast<int>(DouDiZhuGenre::TriplePair));
 			pcg.setOfficer(officer);
 			return static_cast<int>(DouDiZhuGenre::TriplePair);

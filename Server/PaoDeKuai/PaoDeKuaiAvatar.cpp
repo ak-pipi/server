@@ -192,17 +192,23 @@ namespace NiuMa
 				insertCombination(comb);
 			}
 
-			// 三带二
-			for (int o2 = 0; o2 < pointNums; o2++) {
-				if (o2 == o || _pointOrderNums[o2] < 2)
+			// 三带二：跑得快允许任意带两张，不要求对子。
+			{
+				std::vector<int> ids = tripleIds;
+				for (int o2 = 0; o2 < pointNums && static_cast<int>(ids.size()) < 5; o2++) {
+					if (o2 == o)
+						continue;
+					for (int id : _pointOrderCards[o2]) {
+						ids.push_back(id);
+						if (static_cast<int>(ids.size()) == 5)
+							break;
+					}
+				}
+				if (static_cast<int>(ids.size()) != 5)
 					continue;
 				PokerCombination::Ptr comb = allocateCombination();
 				comb->setGenre(static_cast<int>(PaoDeKuaiGenre::TriplePair));
 				comb->setOfficerPoint(o);
-				std::vector<int> ids = tripleIds;
-				int n2 = _pointOrderNums[o2];
-				ids.push_back(_pointOrderCards[o2][n2 - 2]);
-				ids.push_back(_pointOrderCards[o2][n2 - 1]);
 				comb->addCards(ids);
 				insertCombination(comb);
 			}
@@ -253,7 +259,7 @@ namespace NiuMa
 					insertCombination(comb);
 				}
 
-				// 飞机带单
+				// 飞机带一倍数量翅膀，翅膀可为任意牌。
 				{
 					std::vector<int> ids = tripleIds;
 					std::unordered_set<int> used(ids.begin(), ids.end());
@@ -275,24 +281,18 @@ namespace NiuMa
 					}
 				}
 
-				// 飞机带对
+				// 飞机带两倍数量翅膀，翅膀可为任意牌。
 				{
 					std::vector<int> ids = tripleIds;
 					std::unordered_set<int> used(ids.begin(), ids.end());
 					for (int o = 0; o < pointNums && static_cast<int>(ids.size()) < planeLen * 5; o++) {
-						std::vector<int> pairIds;
 						for (int id : _pointOrderCards[o]) {
 							if (used.find(id) != used.end())
 								continue;
-							pairIds.push_back(id);
-							if (pairIds.size() == 2)
+							ids.push_back(id);
+							used.insert(id);
+							if (static_cast<int>(ids.size()) == planeLen * 5)
 								break;
-						}
-						if (pairIds.size() == 2) {
-							ids.push_back(pairIds[0]);
-							ids.push_back(pairIds[1]);
-							used.insert(pairIds[0]);
-							used.insert(pairIds[1]);
 						}
 					}
 					if (static_cast<int>(ids.size()) == planeLen * 5) {

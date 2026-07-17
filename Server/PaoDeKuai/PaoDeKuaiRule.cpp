@@ -217,12 +217,12 @@ namespace NiuMa
 			return static_cast<int>(PaoDeKuaiGenre::Plane);
 		}
 
-		// 飞机带单（连续三条+等量单张）
-		// 飞机带对（连续三条+等量对子）
+		// 飞机带翅膀。跑得快允许翅膀为任意牌：
+		// 2组飞机可带2张，也可带4张；3组飞机可带3张，也可带6张。
 		if ((n % 4 == 0 && n >= 8) || (n % 5 == 0 && n >= 10)) {
 			std::unordered_map<int, int> pointCounts = countPoints(cards);
 			int planeLen = (n % 4 == 0) ? (n / 4) : (n / 5);
-			for (int start = 0; start <= 11 - planeLen + 1; start++) {
+			for (int start = 11 - planeLen + 1; start >= 0; start--) {
 				bool ok = true;
 				for (int i = 0; i < planeLen; i++) {
 					int point = getPointByOrder(start + i);
@@ -251,18 +251,10 @@ namespace NiuMa
 					}
 				}
 				else {
-					int pairs = 0;
-					bool pairOk = true;
-					for (const auto& kv : mates) {
-						if (kv.second == 0)
-							continue;
-						if (kv.second != 2) {
-							pairOk = false;
-							break;
-						}
-						pairs++;
-					}
-					if (pairOk && pairs == planeLen) {
+					int wings = 0;
+					for (const auto& kv : mates)
+						wings += kv.second;
+					if (wings == planeLen * 2) {
 						pcg.setGenre(static_cast<int>(PaoDeKuaiGenre::PlanePair));
 						setOfficerByPoint(pcg, cards, getPointByOrder(start + planeLen - 1));
 						return static_cast<int>(PaoDeKuaiGenre::PlanePair);
