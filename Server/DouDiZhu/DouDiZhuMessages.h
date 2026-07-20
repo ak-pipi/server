@@ -119,6 +119,20 @@ namespace NiuMa
 		MSGPACK_DEFINE_MAP(seat, score, highestBid, highestBidSeat, nextSeat, callCount);
 	};
 
+	class MsgDouDiZhuCallFailed : public MsgBase {
+	public:
+		static const std::string TYPE;
+		virtual const std::string& getType() const { return TYPE; }
+		MSG_PACK_IMPL
+
+	public:
+		std::string errMsg;
+		int callTurn = -1;
+		int highestBid = 0;
+		int highestBidSeat = -1;
+		MSGPACK_DEFINE_MAP(errMsg, callTurn, highestBid, highestBidSeat);
+	};
+
 	class MsgDouDiZhuLandlord : public MsgBase {
 	public:
 		MsgDouDiZhuLandlord();

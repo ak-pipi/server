@@ -12,6 +12,7 @@ namespace NiuMa
 	const std::string MsgDouDiZhuDeal::TYPE = "DouDiZhu.Deal";
 	const std::string MsgDouDiZhuCall::TYPE = "DouDiZhu.Call";
 	const std::string MsgDouDiZhuCallNotify::TYPE = "DouDiZhu.CallNotify";
+	const std::string MsgDouDiZhuCallFailed::TYPE = "DouDiZhu.CallFailed";
 	const std::string MsgDouDiZhuLandlord::TYPE = "DouDiZhu.Landlord";
 	const std::string MsgDouDiZhuPlay::TYPE = "DouDiZhu.Play";
 	const std::string MsgDouDiZhuPlayNotify::TYPE = "DouDiZhu.PlayNotify";

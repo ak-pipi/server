@@ -601,8 +601,11 @@ namespace NiuMa
 		int seat = findSeatByPlayer(msg->getPlayerId());
 		CallResult result = doCall(seat, msg->score);
 		if (result != CallResult::OK && netMsg->getSession()) {
-			std::shared_ptr<MsgDouDiZhuPlayFailed> resp = std::make_shared<MsgDouDiZhuPlayFailed>();
+			std::shared_ptr<MsgDouDiZhuCallFailed> resp = std::make_shared<MsgDouDiZhuCallFailed>();
 			resp->errMsg = result == CallResult::NotYourTurn ? "不是你的叫分回合" : "叫分无效";
+			resp->callTurn = _callTurn;
+			resp->highestBid = _highestBid;
+			resp->highestBidSeat = _highestBidSeat;
 			resp->send(netMsg->getSession());
 		}
 	}
