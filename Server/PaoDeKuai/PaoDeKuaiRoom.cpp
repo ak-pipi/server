@@ -68,7 +68,7 @@ namespace NiuMa
 
 		// 加载规则配置
 		_rule->loadConfig(ruleConfig);
-		setCashPledge(_rule->getBaseScore() * 50);
+		setCashPledge(_rule->getBaseScore() * 8);
 	}
 
 	PaoDeKuaiRoom::~PaoDeKuaiRoom() {}

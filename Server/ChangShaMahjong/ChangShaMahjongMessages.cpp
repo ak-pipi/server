@@ -6,12 +6,66 @@
 
 namespace NiuMa
 {
-	const std::string MsgChangShaSync::TYPE = "ChangSha.Sync";
-	const std::string MsgChangShaReady::TYPE = "ChangSha.Ready";
-	const std::string MsgChangShaDisband::TYPE = "ChangSha.Disband";
-	const std::string MsgChangShaQiShouHu::TYPE = "ChangSha.QiShouHu";
-	const std::string MsgChangShaBird::TYPE = "ChangSha.Bird";
-	const std::string MsgChangShaDisbandVote::TYPE = "ChangSha.DisbandVote";
+	const std::string MsgChangShaSync::TYPE("MsgChangShaSync");
+	const std::string MsgChangShaSyncResp::TYPE("MsgChangShaSyncResp");
+	const std::string MsgChangShaStartRound::TYPE("MsgChangShaStartRound");
+	const std::string MsgChangShaSettlement::TYPE("MsgChangShaSettlement");
+	const std::string MsgChangShaQiShouHu::TYPE("MsgChangShaQiShouHu");
+	const std::string MsgChangShaBird::TYPE("MsgChangShaBird");
+	const std::string MsgChangShaDisbandVote::TYPE("MsgChangShaDisbandVote");
+
+	MsgChangShaSyncResp::MsgChangShaSyncResp()
+		: gold(0)
+		, diamond(0)
+		, diZhu(0)
+		, chi(false)
+		, dianPao(false)
+		, hasFetch(false)
+		, seat(0)
+		, roundState(0)
+		, disbandState(0)
+		, banker(0)
+		, playerCount(4)
+		, roundNo(0)
+		, roundCount(0)
+		, leftTiles(0)
+		, qiShouHuSeat(-1)
+		, qiShouHuType(0)
+		, qiShouHuScore(0)
+		, birdMultiple(1)
+	{
+		for (int i = 0; i < 4; i++)
+			handTileNums[i] = 0;
+	}
+
+	MsgChangShaSyncResp::~MsgChangShaSyncResp() {}
+
+	MsgChangShaStartRound::MsgChangShaStartRound()
+		: banker(0)
+		, playerCount(4)
+		, roundNo(0)
+		, roundCount(0)
+		, birdCount(0)
+		, zhongNiaoEnabled(false)
+		, require258Jiang(true)
+	{}
+
+	MsgChangShaStartRound::~MsgChangShaStartRound() {}
+
+	MsgChangShaSettlement::MsgChangShaSettlement()
+		: kick(false)
+		, birdMultiple(1)
+		, qiShouHuSeat(-1)
+		, qiShouHuType(0)
+		, qiShouHuScore(0)
+	{
+		for (int i = 0; i < 4; i++) {
+			golds[i] = 0LL;
+			winGolds[i] = 0;
+		}
+	}
+
+	MsgChangShaSettlement::~MsgChangShaSettlement() {}
 
 	MsgChangShaQiShouHu::MsgChangShaQiShouHu()
 		: seat(-1)
@@ -32,11 +86,7 @@ namespace NiuMa
 	}
 
 	void ChangShaMahjongMessages::registMessages() {
-		IMsgCreator::Ptr creator1 = IMsgCreator::Ptr(new MsgCreator<MsgChangShaSync>());
-		MessageManager::getSingleton().registCreator(MsgChangShaSync::TYPE, creator1);
-		IMsgCreator::Ptr creator2 = IMsgCreator::Ptr(new MsgCreator<MsgChangShaReady>());
-		MessageManager::getSingleton().registCreator(MsgChangShaReady::TYPE, creator2);
-		IMsgCreator::Ptr creator3 = IMsgCreator::Ptr(new MsgCreator<MsgChangShaDisband>());
-		MessageManager::getSingleton().registCreator(MsgChangShaDisband::TYPE, creator3);
+		IMsgCreator::Ptr creator = IMsgCreator::Ptr(new MsgCreator<MsgChangShaSync>());
+		MessageManager::getSingleton().registCreator(MsgChangShaSync::TYPE, creator);
 	}
 }

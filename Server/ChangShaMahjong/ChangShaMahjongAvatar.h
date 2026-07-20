@@ -15,6 +15,7 @@ namespace NiuMa
 
 	public:
 		virtual void clear() override;
+		virtual bool detectHuStyle(bool bZiMo, const MahjongTile& mt) override;
 		virtual int calcHuScore() const override;
 
 	public:

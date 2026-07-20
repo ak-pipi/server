@@ -42,6 +42,7 @@ namespace NiuMa
 		virtual void calcHuScore() const override;
 		virtual void doJieSuan() override;
 		virtual void afterHu() override;
+		virtual void dealTiles() override;
 
 	private:
 		void parseRuleConfig(const std::string& ruleConfig);
@@ -84,6 +85,7 @@ namespace NiuMa
 		// 中鸟计算
 		void calculateBird(int huSeat);
 		void notifyBird();
+		int getQiShouHuScore(int type) const;
 
 	private:
 		const std::string _number;
@@ -102,6 +104,7 @@ namespace NiuMa
 		bool _qiShouHuTriggered;
 		int _qiShouHuSeat;
 		int _qiShouHuType;
+		int _qiShouHuScore;
 
 		// 中鸟相关
 		std::vector<int> _birdTiles;
@@ -121,6 +124,7 @@ namespace NiuMa
 		bool _dissolveVote;
 		int _bankerRule;
 		int _maxFan;
+		bool _require258Jiang;
 
 		// 起手胡开关
 		bool _queYiSeEnabled;

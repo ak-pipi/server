@@ -4,6 +4,9 @@
 #include "ChangShaMahjongAvatar.h"
 #include "ChangShaMahjongMessages.h"
 #include "ChangShaMahjongRecordTask.h"
+#include "Base/BaseUtils.h"
+#include "Game/GetCapitalTask.h"
+#include "Game/GameMessages.h"
 #include "Game/ReplayUtils.h"
 #include "Game/WalletEventTask.h"
 #include "Game/DebtLiquidation.h"
@@ -16,12 +19,46 @@
 #include "MySql/MysqlPool.h"
 
 #include <json/json.h>
+#include <mysql/jdbc.h>
 #include <algorithm>
+#include <cmath>
+#include <map>
+#include <sstream>
+#include <unordered_map>
 
 namespace NiuMa
 {
+	namespace
+	{
+		bool isNumberTile(const MahjongTile& mt) {
+			int p = static_cast<int>(mt.getPattern()) - static_cast<int>(MahjongTile::Pattern::Tong);
+			int n = static_cast<int>(mt.getNumber());
+			return p >= 0 && p < 3 && n >= 1 && n <= 9;
+		}
+
+		bool is258(const MahjongTile::Tile& tile) {
+			int n = static_cast<int>(tile.getNumber());
+			return n == 2 || n == 5 || n == 8;
+		}
+
+		int tileKey(const MahjongTile& mt) {
+			return static_cast<int>(mt.getPattern()) * 10 + static_cast<int>(mt.getNumber());
+		}
+
+		class ChangShaMahjongRule : public MahjongRule
+		{
+		public:
+			bool hasZiPai() const override { return false; }
+
+		protected:
+			bool isValidJiangTile(const MahjongTile::Tile& tile) const override {
+				return is258(tile);
+			}
+		};
+	}
+
 	ChangShaMahjongRoom::ChangShaMahjongRoom(const std::string& venueId, const std::string& number, int level, const std::string& ruleConfig)
-		: MahjongRoom(std::make_shared<MahjongRule>(), venueId, static_cast<int>(GameType::ChangShaMahjong))
+		: MahjongRoom(std::make_shared<ChangShaMahjongRule>(), venueId, static_cast<int>(GameType::ChangShaMahjong), 4)
 		, _number(number)
 		, _level(level)
 		, _roundState(StageState::NotStarted)
@@ -33,12 +70,13 @@ namespace NiuMa
 		, _qiShouHuTriggered(false)
 		, _qiShouHuSeat(-1)
 		, _qiShouHuType(0)
+		, _qiShouHuScore(0)
 		, _birdMultiple(1)
 		, _diZhu(1)
 		, _maxScore(300)
 		, _roomFeeType(0)
 		, _roundCount(8)
-		, _allowChi(false)
+		, _allowChi(true)
 		, _allowPeng(true)
 		, _allowGang(true)
 		, _allowZiMo(true)
@@ -46,6 +84,7 @@ namespace NiuMa
 		, _dissolveVote(true)
 		, _bankerRule(0)
 		, _maxFan(8)
+		, _require258Jiang(true)
 		, _queYiSeEnabled(true)
 		, _banBanHuEnabled(true)
 		, _daSiXiEnabled(true)
@@ -65,6 +104,10 @@ namespace NiuMa
 			_disbandChoices[i] = 0;
 		}
 		parseRuleConfig(ruleConfig);
+		_chi = _allowChi;
+		_dianPao = _allowDianPao;
+		_anGangVisible = true;
+		setCashPledge(_diZhu * 8);
 	}
 
 	ChangShaMahjongRoom::~ChangShaMahjongRoom() {}
@@ -82,7 +125,9 @@ namespace NiuMa
 		}
 		delete reader;
 
-		if (root.isMember("di_zhu") && root["di_zhu"].isInt())
+		if (root.isMember("base_score") && root["base_score"].isInt())
+			_diZhu = root["base_score"].asInt();
+		else if (root.isMember("di_zhu") && root["di_zhu"].isInt())
 			_diZhu = root["di_zhu"].asInt();
 		if (root.isMember("max_score") && root["max_score"].isInt())
 			_maxScore = root["max_score"].asInt();
@@ -106,6 +151,8 @@ namespace NiuMa
 			_bankerRule = root["banker_rule"].asInt();
 		if (root.isMember("max_fan") && root["max_fan"].isInt())
 			_maxFan = root["max_fan"].asInt();
+		if (root.isMember("require_258_jiang") && root["require_258_jiang"].isBool())
+			_require258Jiang = root["require_258_jiang"].asBool();
 
 		// 起手胡开关
 		if (root.isMember("queyise_enabled") && root["queyise_enabled"].isBool())
@@ -132,6 +179,9 @@ namespace NiuMa
 			_birdDouble = root["bird_double"].asBool();
 		if (root.isMember("bird_cap_max") && root["bird_cap_max"].isBool())
 			_birdCapMax = root["bird_cap_max"].asBool();
+
+		_chi = _allowChi;
+		_dianPao = _allowDianPao;
 	}
 
 	GameAvatar::Ptr ChangShaMahjongRoom::createAvatar(const std::string& playerId, int seat, bool robot) const {
@@ -139,8 +189,8 @@ namespace NiuMa
 	}
 
 	bool ChangShaMahjongRoom::checkEnter(const std::string& playerId, std::string& errMsg, bool robot) const {
-		if (getAvatarCount() >= 4) {
-			errMsg = "房间已满";
+		if (_roundState == StageState::Underway) {
+			errMsg = "游戏正在进行中，不能进入房间";
 			return false;
 		}
 		return true;
@@ -148,38 +198,49 @@ namespace NiuMa
 
 	int ChangShaMahjongRoom::checkLeave(const std::string& playerId, std::string& errMsg) const {
 		if (_roundState == StageState::Underway) {
-			errMsg = "游戏进行中";
-			return 2;
+			errMsg = "游戏正在进行中，不能离开房间";
+			return 1;
 		}
 		return 0;
 	}
 
 	void ChangShaMahjongRoom::getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const {
-		// 长沙麻将额外信息
+		std::shared_ptr<GetCapitalTask> task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
+		MysqlPool::getSingleton().syncQuery(task);
+		int64_t gold = avatar->getCashPledge();
+		int64_t diamond = 0LL;
+		if (task->getSucceed() && task->getRows() > 0) {
+			gold += task->getGold();
+			diamond = task->getDiamond();
+		}
+		Json::Value tmp(Json::objectValue);
+		tmp["gold"] = static_cast<Json::Int64>(gold);
+		tmp["diamond"] = static_cast<Json::Int64>(diamond);
+		if (!avatar->isOffline()) {
+			Session::Ptr session = avatar->getSession();
+			if (session)
+				tmp["ip"] = session->getRemoteIp();
+		}
+		std::string json = tmp.toStyledString();
+		BaseUtils::encodeBase64(base64, json.data(), static_cast<int>(json.size()));
 	}
 
 	void ChangShaMahjongRoom::onAvatarLeaved(int seat, const std::string& playerId) {
-		if (seat >= 0 && seat < 4)
-			_kicks[seat] = false;
 		if (getAvatarCount() == 0)
-			_roundState = StageState::NotStarted;
+			gameOver();
 	}
 
 	void ChangShaMahjongRoom::clean() {
-		_roundState = StageState::NotStarted;
-		_roundNo = 0;
+		MahjongRoom::clean();
 		_qiShouHuTriggered = false;
 		_qiShouHuSeat = -1;
 		_qiShouHuType = 0;
+		_qiShouHuScore = 0;
 		_birdTiles.clear();
 		_birdHitSeats.clear();
 		_birdMultiple = 1;
-		_playbackData = ChangShaMahjongPlaybackData();
-		for (int i = 0; i < 4; i++) {
-			auto avatar = std::dynamic_pointer_cast<ChangShaMahjongAvatar>(getAvatar(i));
-			if (avatar)
-				avatar->clear();
-		}
+		for (int i = 0; i < 4; i++)
+			_kicks[i] = false;
 	}
 
 	double* ChangShaMahjongRoom::getDistances() {
@@ -208,184 +269,503 @@ namespace NiuMa
 	}
 
 	void ChangShaMahjongRoom::calcHuScore() const {
-		// 胡牌分数计算在doJieSuan中处理
+		if (!_hu)
+			return;
+
+		int score = 0;
+		int scores[4] = { 0, 0, 0, 0 };
+		ChangShaMahjongAvatar* avatar1 = nullptr;
+		ChangShaMahjongAvatar* avatar2 = nullptr;
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			avatar1 = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(i).get());
+			if (avatar1 == nullptr || !avatar1->isHu())
+				continue;
+
+			const_cast<ChangShaMahjongRoom*>(this)->calculateBird(i);
+			score = avatar1->calcHuScore() * _birdMultiple;
+			if (_maxScore > 0 && score > _maxScore)
+				score = _maxScore;
+
+			if (avatar1->isDianPao()) {
+				avatar2 = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(_actor).get());
+				if (avatar2 != nullptr) {
+					avatar1->addLoseScore(_actor, -score);
+					avatar2->addLoseScore(i, score);
+				}
+			}
+			else {
+				for (int j = 0; j < getMaxPlayerNums(); j++) {
+					if (i == j)
+						continue;
+					avatar2 = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(j).get());
+					if (avatar2 == nullptr)
+						continue;
+					avatar1->addLoseScore(j, -score);
+					avatar2->addLoseScore(i, score);
+				}
+			}
+		}
+
+		int loseScores[4] = { 0 };
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			avatar1 = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(i).get());
+			if (avatar1 == nullptr)
+				continue;
+			avatar1->getLoseScores(loseScores);
+			for (int j = 0; j < 4; j++) {
+				if (i != j)
+					scores[j] += loseScores[j];
+			}
+		}
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			avatar1 = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(i).get());
+			if (avatar1 != nullptr)
+				avatar1->setScore(scores[i]);
+		}
+
+		bool test = false;
+		double capital = 0.0;
+		DebtNode* node = nullptr;
+		std::unordered_map<int, DebtNode*> debtNet;
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			avatar1 = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(i).get());
+			if (avatar1 == nullptr)
+				continue;
+			test = false;
+			avatar1->getLoseScores(loseScores);
+			for (int j = 0; j < 4; j++) {
+				if ((i == j) || (loseScores[j] == 0))
+					continue;
+				test = true;
+				break;
+			}
+			if (!test)
+				continue;
+			capital = static_cast<double>(avatar1->getCashPledge());
+			node = new DebtNode(i, capital);
+			debtNet.insert(std::make_pair(i, node));
+		}
+		std::unordered_map<int, DebtNode*>::const_iterator it1 = debtNet.begin();
+		std::unordered_map<int, DebtNode*>::const_iterator it2;
+		while (it1 != debtNet.end()) {
+			node = it1->second;
+			avatar1 = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(it1->first).get());
+			avatar1->getLoseScores(loseScores);
+			for (int j = 0; j < 4; j++) {
+				if (((it1->first) == j) || (loseScores[j] == 0))
+					continue;
+				it2 = debtNet.find(j);
+				if (it2 != debtNet.end())
+					node->tally((it2->second), static_cast<double>(_diZhu) * loseScores[j]);
+			}
+			++it1;
+		}
+		std::string logDebt;
+		DebtLiquidation dl;
+		dl.printDebtNet(debtNet, logDebt);
+		if (!dl(debtNet)) {
+			dl.releaseDebtNet(debtNet);
+			ErrorS << "清算结果不正确，原始债务网：" << logDebt;
+			return;
+		}
+		it1 = debtNet.begin();
+		while (it1 != debtNet.end()) {
+			node = it1->second;
+			if (node->getCapital() < 0.0) {
+				dl.releaseDebtNet(debtNet);
+				ErrorS << "清算之后存在负数结果，原始债务网：" << logDebt;
+				return;
+			}
+			++it1;
+		}
+		it1 = debtNet.begin();
+		while (it1 != debtNet.end()) {
+			avatar1 = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(it1->first).get());
+			node = it1->second;
+			capital = node->getCapital();
+			avatar1->setWinGold(capital - static_cast<double>(avatar1->getCashPledge()));
+			++it1;
+		}
+		dl.releaseDebtNet(debtNet);
 	}
 
 	void ChangShaMahjongRoom::doJieSuan() {
-		// 基础结算逻辑
-		// 胡牌者得分，其他玩家扣分
-		// 起手胡、中鸟翻倍等在此计算
+		_roundState = StageState::NotStarted;
+		const bool allRoundsFinished = (_roundCount > 0 && _roundNo >= _roundCount);
+
+		MsgChangShaSettlement msg;
+		getSettlementData(&(msg.data));
+		msg.birdTiles = _birdTiles;
+		msg.hitSeats = _birdHitSeats;
+		msg.birdMultiple = _birdMultiple;
+		msg.qiShouHuSeat = _qiShouHuSeat;
+		msg.qiShouHuType = _qiShouHuType;
+		msg.qiShouHuScore = _qiShouHuScore;
+
+		double delta = 0.0;
+		int64_t cashPledge = 0LL;
+		int64_t goldNeed = getCashPledge();
+		bool test = true;
+		GameAvatar::Ptr ptr;
+		ChangShaMahjongAvatar* avatar = nullptr;
+		std::shared_ptr<GetCapitalTask> task;
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			ptr = getAvatar(i);
+			avatar = dynamic_cast<ChangShaMahjongAvatar*>(ptr.get());
+			if (avatar == nullptr)
+				continue;
+			delta = floor(avatar->getWinGold() + 0.5);
+			avatar->setWinGold(delta);
+			msg.winGolds[i] = static_cast<int>(delta);
+			cashPledge = avatar->getCashPledge();
+			cashPledge += msg.winGolds[i];
+			test = true;
+			if (msg.winGolds[i] != 0) {
+				if (cashPledge < goldNeed)
+					test = deductCashPledge(ptr);
+				else
+					updateCashPledge(avatar->getPlayerId(), cashPledge);
+			}
+			task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
+			MysqlPool::getSingleton().syncQuery(task);
+			if (task->getSucceed() && task->getRows() > 0)
+				msg.golds[i] = task->getGold() + avatar->getCashPledge();
+			if (!test)
+				_kicks[i] = true;
+		}
+
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			avatar = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(i).get());
+			if (avatar == nullptr)
+				continue;
+			msg.kick = _kicks[i] && !allRoundsFinished;
+			msg.send(avatar->getSession());
+		}
 	}
 
 	void ChangShaMahjongRoom::afterHu() {
-		// 胡牌后处理：中鸟、结算、保存记录
 		saveRoundRecord();
+		const bool allRoundsFinished = (_roundCount > 0 && _roundNo >= _roundCount);
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			GameAvatar::Ptr avatar = getAvatar(i);
+			if (!avatar)
+				continue;
+			if (_kicks[i] && !allRoundsFinished)
+				kickAvatar(avatar);
+			else
+				avatar->setReady(false);
+		}
 	}
 
 	void ChangShaMahjongRoom::onTimer() {
-		time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-
-		// 解散超时处理
-		if (_disbandState == StageState::Underway && _disbandTick > 0 && now >= _disbandTick) {
-			disbandRoom();
+		if (_disbandState == StageState::Underway) {
+			time_t nowTick = BaseUtils::getCurrentMillisecond();
+			int deltaTicks = static_cast<int>(nowTick - _disbandTick);
+			if (deltaTicks > 300000) {
+				for (int i = 0; i < getMaxPlayerNums(); i++) {
+					if (_disbandChoices[i] == 0)
+						doDisbandChoose(i, 1);
+				}
+			}
 		}
 	}
 
 	bool ChangShaMahjongRoom::onMessage(const NetMessage::Ptr& netMsg) {
+		if (MahjongRoom::onMessage(netMsg))
+			return true;
+
+		bool ret = true;
 		const std::string& type = netMsg->getType();
-		if (type == MsgChangShaSync::TYPE) {
+		if (type == MsgChangShaSync::TYPE)
 			onSyncMahjong(netMsg);
-			return true;
-		}
-		else if (type == MsgChangShaReady::TYPE) {
+		else if (type == MsgPlayerReady::TYPE)
 			onPlayerReady(netMsg);
-			return true;
-		}
-		else if (type == MsgChangShaDisband::TYPE) {
-			auto msg = std::dynamic_pointer_cast<MsgChangShaDisband>(netMsg);
-			if (!msg)
-				return true;
-			if (msg->choice == 1) {
-				onDisbandRequest(netMsg);
-			}
-			else {
-				// 查找座位
-				GameAvatar::Ptr av = getAvatar(msg->getPlayerId());
-				if (av) {
-					int seat = av->getSeat();
-					doDisbandChoose(seat, msg->choice);
-				}
-			}
-			return true;
-		}
-		return MahjongRoom::onMessage(netMsg);
+		else if (type == MsgDisbandRequest::TYPE)
+			onDisbandRequest(netMsg);
+		else if (type == MsgDisbandChoose::TYPE)
+			onDisbandChoose(netMsg);
+		else
+			ret = false;
+		return ret;
 	}
 
 	void ChangShaMahjongRoom::onSyncMahjong(const NetMessage::Ptr& netMsg) {
-		// 复用基类的同步消息处理
-		MahjongRoom::onMessage(netMsg);
+		MsgChangShaSync* inst = dynamic_cast<MsgChangShaSync*>(netMsg->getMessage().get());
+		if (inst == nullptr)
+			return;
+		ChangShaMahjongAvatar* avatar = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(inst->getPlayerId()).get());
+		if (avatar == nullptr)
+			return;
+		std::shared_ptr<GetCapitalTask> task = std::make_shared<GetCapitalTask>(inst->getPlayerId());
+		MysqlPool::getSingleton().syncQuery(task);
+		if (!task->getSucceed() || task->getRows() < 1) {
+			ErrorS << "查询玩家资产失败，场地Id: " << getId() << ", 玩家Id: " << inst->getPlayerId();
+			return;
+		}
+
+		MsgChangShaSyncResp msg;
+		msg.number = _number;
+		msg.gold = task->getGold();
+		msg.diamond = task->getDiamond();
+		msg.diZhu = _diZhu;
+		msg.chi = _allowChi;
+		msg.dianPao = _allowDianPao;
+		msg.seat = avatar->getSeat();
+		msg.roundState = static_cast<int>(_roundState);
+		msg.disbandState = static_cast<int>(_disbandState);
+		msg.banker = _banker;
+		msg.playerCount = getMaxPlayerNums();
+		msg.roundNo = _roundNo;
+		msg.roundCount = _roundCount;
+		msg.leftTiles = _dealer.getTileLeft();
+		msg.qiShouHuSeat = _qiShouHuSeat;
+		msg.qiShouHuType = _qiShouHuType;
+		msg.qiShouHuScore = _qiShouHuScore;
+		msg.birdTiles = _birdTiles;
+		msg.hitSeats = _birdHitSeats;
+		msg.birdMultiple = _birdMultiple;
+
+		ChangShaMahjongAvatar* tmpAvatar = nullptr;
+		if (_roundState == StageState::Underway) {
+			for (int i = 0; i < getMaxPlayerNums(); i++) {
+				tmpAvatar = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(i).get());
+				if (tmpAvatar == nullptr)
+					continue;
+				if (i == avatar->getSeat()) {
+					msg.handTiles = tmpAvatar->getTiles();
+					if ((i == _actor) && !_actions.empty()) {
+						const MahjongAction& ma = _actions.back();
+						if (ma.getType() == MahjongAction::Type::Fetch) {
+							int tileId = tmpAvatar->getFetchedTileId();
+							msg.hasFetch = true;
+							msg.fetchTile.setId(tileId);
+							_dealer.getTileById(msg.fetchTile);
+						}
+					}
+				}
+				msg.handTileNums[i] = tmpAvatar->getTileNums();
+				tmpAvatar->getPlayedTilesNoAction(msg.playedTiles[i]);
+				msg.chapters[i] = tmpAvatar->getChapters();
+			}
+		}
+		msg.send(netMsg->getSession());
+		sendAvatars(netMsg->getSession());
+		if (_roundState == StageState::Underway) {
+			notifyActorUpdated(inst->getPlayerId());
+			if ((_state == StateMachine::Action) || (_state == StateMachine::Play))
+				notifyWaitingAction(inst->getPlayerId());
+			if (avatar->hasActionOption())
+				notifyActionOptions(avatar);
+			notifyTingTile(avatar);
+			if (_disbandState == StageState::Underway)
+				notifyDisbandVote(inst->getPlayerId());
+		}
 	}
 
 	void ChangShaMahjongRoom::onPlayerReady(const NetMessage::Ptr& netMsg) {
-		auto msg = std::dynamic_pointer_cast<MsgChangShaReady>(netMsg);
-		if (!msg)
+		if (_roundState != StageState::NotStarted)
 			return;
-		const std::string& playerId = msg->getPlayerId();
-		GameAvatar::Ptr av = getAvatar(playerId);
-		if (av) {
-			auto avatar = std::dynamic_pointer_cast<ChangShaMahjongAvatar>(av);
-			if (avatar)
-				avatar->setReady(true);
-		}
-		// 检查是否所有人都准备了
-		bool allReady = true;
-		if (getAvatarCount() < 4)
-			allReady = false;
-		if (allReady) {
-			for (int i = 0; i < 4; i++) {
-				auto avatar = std::dynamic_pointer_cast<ChangShaMahjongAvatar>(getAvatar(i));
-				if (avatar && !avatar->isReady()) {
-					allReady = false;
-					break;
-				}
-			}
-		}
-		if (allReady) {
+		if (_roundCount > 0 && _roundNo >= _roundCount)
+			return;
+		MsgPlayerReady* inst = dynamic_cast<MsgPlayerReady*>(netMsg->getMessage().get());
+		if (inst == nullptr)
+			return;
+		ChangShaMahjongAvatar* avatar = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(inst->getPlayerId()).get());
+		if (avatar == nullptr)
+			return;
+		avatar->setReady(true);
+		MsgPlayerReadyResp msg;
+		msg.playerId = avatar->getPlayerId();
+		msg.seat = avatar->getSeat();
+		sendMessageToAll(msg);
+		if (isFull() && isAllReady())
 			startRound();
-		}
 	}
 
 	void ChangShaMahjongRoom::startRound() {
+		if (_roundCount > 0 && _roundNo >= _roundCount)
+			return;
+		if (_roundNo == 0) {
+			class GetMaxRoundNoTask : public MysqlQueryTask {
+			public:
+				GetMaxRoundNoTask(const std::string& venueId)
+					: _venueId(venueId)
+					, _maxRoundNo(0)
+				{}
+
+				virtual ~GetMaxRoundNoTask() {}
+
+			public:
+				virtual QueryType buildQuery(std::string& sql) override {
+					std::stringstream ss;
+					ss << "select max(`round_no`) from `game_changsha_mahjong_record` where `venue_id` = \"" << _venueId << "\"";
+					sql = ss.str();
+					return QueryType::Select;
+				}
+
+				virtual int fetchResult(sql::ResultSet* res) override {
+					int rows = 0;
+					while (res->next()) {
+						_maxRoundNo = res->getInt(1);
+						rows++;
+					}
+					return rows;
+				}
+
+			public:
+				const std::string _venueId;
+				int _maxRoundNo;
+			};
+			std::shared_ptr<GetMaxRoundNoTask> task = std::make_shared<GetMaxRoundNoTask>(getId());
+			MysqlPool::getSingleton().syncQuery(task);
+			if (task->getSucceed() && task->getRows() > 0)
+				_roundNo = task->_maxRoundNo;
+		}
+		if (_roundCount > 0 && _roundNo >= _roundCount)
+			return;
+
+		_roundState = StageState::Underway;
+		_backupBanker = _banker;
+		clean();
+		_playbackData = ChangShaMahjongPlaybackData();
+		_dealer.shuffle();
 		_roundNo++;
 		_qiShouHuTriggered = false;
 		_qiShouHuSeat = -1;
 		_qiShouHuType = 0;
+		_qiShouHuScore = 0;
 		_birdTiles.clear();
 		_birdHitSeats.clear();
 		_birdMultiple = 1;
 
-		// 重置玩家状态
-		for (int i = 0; i < 4; i++) {
-			auto avatar = std::dynamic_pointer_cast<ChangShaMahjongAvatar>(getAvatar(i));
-			if (avatar) {
-				avatar->clear();
-				avatar->setReady(false);
-			}
-		}
-
-		// 风控采集：开始新局
 		_riskCollector.startRound(getId(), static_cast<int>(GameType::ChangShaMahjong), _roundNo);
 		for (int i = 0; i < 4; i++) {
 			GameAvatar::Ptr av = getAvatar(i);
-			if (av)
+			if (av) {
+				av->setReady(false);
 				_riskCollector.recordPlayer(av->getPlayerId(), i);
+			}
 		}
 
-		// 调用基类的开始发牌
-		// MahjongRoom基类会处理洗牌、发牌、分配座位等
-		_roundState = StageState::Underway;
+		MsgChangShaStartRound msg;
+		msg.banker = _banker;
+		msg.playerCount = getMaxPlayerNums();
+		msg.roundNo = _roundNo;
+		msg.roundCount = _roundCount;
+		msg.birdCount = _birdCount;
+		msg.zhongNiaoEnabled = _zhongNiaoEnabled;
+		msg.require258Jiang = _require258Jiang;
 
-		{
-			std::ostringstream oss;
-			oss << "长沙麻将游戏开始，场地: " << getId() << "，局号: " << _roundNo;
-			LOG_INFO(oss.str());
+		std::ostringstream oss;
+		oss << "长沙麻将牌桌(Id:" << getId() << ")开局，各玩家Id: ";
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			ChangShaMahjongAvatar* avatar = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(i).get());
+			if (avatar == nullptr)
+				continue;
+			if (i > 0)
+				oss << "、";
+			oss << avatar->getPlayerId();
+			msg.send(avatar->getSession());
 		}
+		LOG_INFO(oss.str());
+
+		dealTiles();
+	}
+
+	void ChangShaMahjongRoom::dealTiles() {
+		MahjongAvatar* pAvatar = nullptr;
+		MahjongTile mt;
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			pAvatar = dynamic_cast<MahjongAvatar*>(getAvatar(i).get());
+			if (pAvatar == nullptr)
+				continue;
+			MahjongTileArray& lstTiles = pAvatar->getTiles();
+			lstTiles.clear();
+			for (unsigned int j = 0; j < 13; j++) {
+				_dealer.fetchTile(mt);
+				lstTiles.push_back(mt);
+			}
+			pAvatar->sortTiles();
+			pAvatar->backupDealedTiles();
+			_rule->checkTingPai(pAvatar->getTiles(), pAvatar->getGangTiles(), pAvatar->getTingTiles(), pAvatar);
+		}
+
+		notifyDealTiles();
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			pAvatar = dynamic_cast<MahjongAvatar*>(getAvatar(i).get());
+			if (pAvatar == nullptr)
+				continue;
+			notifyTingTile(pAvatar);
+		}
+
+		updateCurrentActor(_banker);
+		fetchTile();
+		checkQiShouHu();
 	}
 
 	void ChangShaMahjongRoom::checkQiShouHu() {
-		// 发牌后立即检测每个玩家是否有起手胡
+		// 发牌后立即检测每个玩家是否有起手胡，长沙起手胡结算后继续本局。
 		for (int i = 0; i < 4; i++) {
 			GameAvatar::Ptr av = getAvatar(i);
 			if (!av) continue;
 			int type = detectQiShouHuType(i);
 			if (type > 0) {
 				_qiShouHuTriggered = true;
-				_qiShouHuSeat = i;
-				_qiShouHuType = type;
-
 				auto avatar = std::dynamic_pointer_cast<ChangShaMahjongAvatar>(av);
 				if (avatar) {
 					avatar->setQiShouHuType(type);
-					int score = _diZhu;
-					switch (type) {
-					case 1: score *= 1; break; // 缺一色
-					case 2: score *= 1; break; // 板板胡
-					case 3: score *= 4; break; // 大四喜
-					case 4: score *= 2; break; // 六六顺
-					case 5: score *= 2; break; // 节节高
-					case 6: score *= 2; break; // 三同
-					case 7: score *= 1; break; // 一枝花
-					}
-					if (score > _maxScore)
-						score = _maxScore;
+					int score = getQiShouHuScore(type);
 					avatar->setQiShouHuScore(score);
+					if (_qiShouHuSeat < 0) {
+						_qiShouHuSeat = i;
+						_qiShouHuType = type;
+						_qiShouHuScore = score;
+					}
 				}
 
 				// 通知所有玩家
-				auto msg = std::make_shared<MsgChangShaQiShouHu>();
-				msg->seat = i;
-				msg->huType = type;
-				msg->score = avatar ? avatar->getQiShouHuScore() : 0;
-				sendMessageToAll(*msg);
+				MsgChangShaQiShouHu msg;
+				msg.seat = i;
+				msg.huType = type;
+				msg.score = avatar ? avatar->getQiShouHuScore() : 0;
+				sendMessageToAll(msg);
 
 				// 执行起手胡结算
 				// 胡牌者获得其他玩家赔付
 				if (avatar) {
 					int score = avatar->getQiShouHuScore();
-					avatar->setWinGold(score * 3.0 * _level);
+					avatar->setWinGold(avatar->getWinGold() + score * 3.0);
 					for (int j = 0; j < 4; j++) {
 						if (j != i) {
 							auto other = std::dynamic_pointer_cast<ChangShaMahjongAvatar>(getAvatar(j));
 							if (other) {
 								other->addLoseScore(i, score);
-								other->setWinGold(-score * _level);
+								other->setWinGold(other->getWinGold() - score);
 							}
 						}
 					}
 				}
-				break; // 只处理第一个检测到的起手胡
 			}
 		}
+	}
+
+	int ChangShaMahjongRoom::getQiShouHuScore(int type) const {
+		int multiple = 1;
+		switch (type) {
+		case 3: multiple = 4; break; // 四喜/大四喜
+		case 4: // 六六顺
+		case 5: // 节节高
+		case 6: // 三同
+			multiple = 2;
+			break;
+		default:
+			multiple = 1;
+			break;
+		}
+		int score = _diZhu * multiple;
+		if (_maxScore > 0 && score > _maxScore)
+			score = _maxScore;
+		return score;
 	}
 
 	int ChangShaMahjongRoom::detectQiShouHuType(int seat) const {
@@ -426,15 +806,8 @@ namespace NiuMa
 		if (!avatar)
 			return false;
 		const MahjongTileArray& tiles = avatar->getTiles();
-		// 统计每种相同牌的数量（使用id判断同类型同数值）
-		std::unordered_map<int, int> freqs;
 		for (const auto& t : tiles) {
-			// 使用pattern+number作为key
-			int key = static_cast<int>(t.getPattern()) * 10 + static_cast<int>(t.getNumber());
-			freqs[key]++;
-		}
-		for (const auto& kv : freqs) {
-			if (kv.second >= 2)
+			if (isNumberTile(t) && is258(t.getTile()))
 				return false;
 		}
 		return true;
@@ -445,15 +818,10 @@ namespace NiuMa
 		if (!avatar)
 			return false;
 		const MahjongTileArray& tiles = avatar->getTiles();
-		// 统计风牌数量
 		std::unordered_map<int, int> freqs;
 		for (const auto& t : tiles) {
-			auto p = t.getPattern();
-			if (p == MahjongTile::Pattern::Dong || p == MahjongTile::Pattern::Nan ||
-				p == MahjongTile::Pattern::Xi || p == MahjongTile::Pattern::Bei) {
-				int key = static_cast<int>(p);
-				freqs[key]++;
-			}
+			if (isNumberTile(t))
+				freqs[tileKey(t)]++;
 		}
 		for (const auto& kv : freqs) {
 			if (kv.second >= 4)
@@ -485,18 +853,19 @@ namespace NiuMa
 		if (!avatar)
 			return false;
 		const MahjongTileArray& tiles = avatar->getTiles();
-		// 三种花色各有一张同数值的牌
-		std::unordered_map<int, int> wanFreqs, tiaoFreqs, tongFreqs;
+		int counts[3][9] = { {0} };
 		for (const auto& t : tiles) {
-			auto n = static_cast<int>(t.getNumber());
-			auto p = t.getPattern();
-			if (p == MahjongTile::Pattern::Wan) wanFreqs[n]++;
-			else if (p == MahjongTile::Pattern::Tiao) tiaoFreqs[n]++;
-			else if (p == MahjongTile::Pattern::Tong) tongFreqs[n]++;
+			if (!isNumberTile(t))
+				continue;
+			int p = static_cast<int>(t.getPattern()) - static_cast<int>(MahjongTile::Pattern::Tong);
+			int n = static_cast<int>(t.getNumber()) - 1;
+			counts[p][n]++;
 		}
-		for (int i = 1; i <= 9; i++) {
-			if (wanFreqs[i] > 0 && tiaoFreqs[i] > 0 && tongFreqs[i] > 0)
-				return true;
+		for (int p = 0; p < 3; p++) {
+			for (int n = 0; n <= 6; n++) {
+				if (counts[p][n] >= 2 && counts[p][n + 1] >= 2 && counts[p][n + 2] >= 2)
+					return true;
+			}
 		}
 		return false;
 	}
@@ -506,17 +875,16 @@ namespace NiuMa
 		if (!avatar)
 			return false;
 		const MahjongTileArray& tiles = avatar->getTiles();
-		std::unordered_map<int, int> freqs;
+		int counts[3][9] = { {0} };
 		for (const auto& t : tiles) {
-			auto p = t.getPattern();
-			// 非风牌
-			if (p == MahjongTile::Pattern::Wan || p == MahjongTile::Pattern::Tiao || p == MahjongTile::Pattern::Tong) {
-				int key = static_cast<int>(p) * 10 + static_cast<int>(t.getNumber());
-				freqs[key]++;
-			}
+			if (!isNumberTile(t))
+				continue;
+			int p = static_cast<int>(t.getPattern()) - static_cast<int>(MahjongTile::Pattern::Tong);
+			int n = static_cast<int>(t.getNumber()) - 1;
+			counts[p][n]++;
 		}
-		for (const auto& kv : freqs) {
-			if (kv.second >= 3)
+		for (int n = 0; n < 9; n++) {
+			if (counts[0][n] >= 2 && counts[1][n] >= 2 && counts[2][n] >= 2)
 				return true;
 		}
 		return false;
@@ -527,24 +895,18 @@ namespace NiuMa
 		if (!avatar)
 			return false;
 		const MahjongTileArray& tiles = avatar->getTiles();
-		int wanCount = 0, tiaoCount = 0, tongCount = 0, fengCount = 0, jianCount = 0;
+		int jiangCount = 0;
+		bool hasFive = false;
 		for (const auto& t : tiles) {
-			auto p = t.getPattern();
-			if (p == MahjongTile::Pattern::Wan) wanCount++;
-			else if (p == MahjongTile::Pattern::Tiao) tiaoCount++;
-			else if (p == MahjongTile::Pattern::Tong) tongCount++;
-			else if (p == MahjongTile::Pattern::Dong || p == MahjongTile::Pattern::Nan ||
-					 p == MahjongTile::Pattern::Xi || p == MahjongTile::Pattern::Bei)
-				fengCount++;
-			else if (p == MahjongTile::Pattern::Zhong || p == MahjongTile::Pattern::Fa ||
-					 p == MahjongTile::Pattern::Bai)
-				jianCount++;
+			if (!isNumberTile(t))
+				continue;
+			if (is258(t.getTile())) {
+				jiangCount++;
+				if (static_cast<int>(t.getNumber()) == 5)
+					hasFive = true;
+			}
 		}
-		int hasCount = 0;
-		if (wanCount > 0) hasCount++;
-		if (tiaoCount > 0) hasCount++;
-		if (tongCount > 0) hasCount++;
-		return hasCount == 1 && fengCount == 0 && jianCount == 0;
+		return jiangCount == 1 && hasFive;
 	}
 
 	void ChangShaMahjongRoom::calculateBird(int huSeat) {
@@ -555,17 +917,18 @@ namespace NiuMa
 		_birdHitSeats.clear();
 		_birdMultiple = 1;
 
-		// 从牌墙末尾翻出birdCount张牌作为鸟牌
-		// 使用随机数确定鸟牌
+		// 从牌墙末尾翻出 birdCount 张牌作为鸟牌，按庄家为 1 顺位数鸟。
 		for (int i = 0; i < _birdCount; i++) {
-			// 随机生成鸟牌ID（0~33）
-			int birdTile = (i * 9 + 3) % 34; // 简化实现：使用固定偏移
-			_birdTiles.push_back(birdTile);
+			MahjongTile mt;
+			if (!_dealer.fetchTile1(mt))
+				break;
+			_birdTiles.push_back(mt.getId());
 
-			// 判断鸟牌命中的玩家（鸟牌值%4 = 玩家座位偏移）
-			int tileValue = birdTile % 9; // 牌面值
-			int hitOffset = tileValue % 4;
-			int hitSeat = (huSeat + hitOffset) % 4;
+			int tileValue = static_cast<int>(mt.getNumber());
+			if (tileValue < 1 || tileValue > 9)
+				tileValue = 1;
+			int hitOffset = (tileValue - 1) % 4;
+			int hitSeat = (_banker + hitOffset) % 4;
 			_birdHitSeats.push_back(hitSeat);
 		}
 
@@ -592,48 +955,61 @@ namespace NiuMa
 	}
 
 	void ChangShaMahjongRoom::notifyBird() {
-		auto msg = std::make_shared<MsgChangShaBird>();
-		msg->birdTiles = _birdTiles;
-		msg->hitSeats = _birdHitSeats;
-		msg->multiple = _birdMultiple;
-		sendMessageToAll(*msg);
+		MsgChangShaBird msg;
+		msg.birdTiles = _birdTiles;
+		msg.hitSeats = _birdHitSeats;
+		msg.multiple = _birdMultiple;
+		sendMessageToAll(msg);
 	}
 
 	void ChangShaMahjongRoom::onDisbandRequest(const NetMessage::Ptr& netMsg) {
-		if (!_dissolveVote || _roundState != StageState::Underway)
+		if (!_dissolveVote)
 			return;
-		auto msg = std::dynamic_pointer_cast<MsgChangShaDisband>(netMsg);
-		if (!msg)
+		if (_disbandState == StageState::Underway)
 			return;
-		GameAvatar::Ptr av = getAvatar(msg->getPlayerId());
+		MsgDisbandRequest* inst = dynamic_cast<MsgDisbandRequest*>(netMsg->getMessage().get());
+		if (inst == nullptr)
+			return;
+		GameAvatar::Ptr av = getAvatar(inst->getPlayerId());
 		if (av)
 			_disbander = av->getSeat();
 		if (_disbander < 0)
 			return;
 
 		_disbandState = StageState::Underway;
-		_disbandTick = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) + 180; // 3分钟投票时间
+		_disbandTick = BaseUtils::getCurrentMillisecond();
 		for (int i = 0; i < 4; i++)
 			_disbandChoices[i] = 0;
 		_disbandChoices[_disbander] = 1; // 发起者默认同意
 
-		for (int i = 0; i < 4; i++) {
-			GameAvatar::Ptr av2 = getAvatar(i);
-			if (av2)
-				notifyDisbandVote(av2->getPlayerId());
-		}
+		notifyDisbandVote(std::string(""));
 	}
 
 	void ChangShaMahjongRoom::notifyDisbandVote(const std::string& playerId) {
-		auto msg = std::make_shared<MsgChangShaDisbandVote>();
-		msg->disbander = _disbander;
-		time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-		msg->remainTime = static_cast<int>(_disbandTick - now);
-		if (msg->remainTime < 0)
-			msg->remainTime = 0;
+		MsgChangShaDisbandVote msg;
+		msg.disbander = _disbander;
+		time_t nowTick = BaseUtils::getCurrentMillisecond();
+		int elapsed = static_cast<int>((nowTick - _disbandTick) / 1000LL);
+		msg.remainTime = 300 - elapsed;
+		if (msg.remainTime < 0)
+			msg.remainTime = 0;
 		for (int i = 0; i < 4; i++)
-			msg->choices[i] = _disbandChoices[i];
-		sendMessage(*msg, playerId);
+			msg.choices[i] = _disbandChoices[i];
+		if (playerId.empty())
+			sendMessageToAll(msg);
+		else
+			sendMessage(msg, playerId);
+	}
+
+	void ChangShaMahjongRoom::onDisbandChoose(const NetMessage::Ptr& netMsg) {
+		MsgDisbandChoose* inst = dynamic_cast<MsgDisbandChoose*>(netMsg->getMessage().get());
+		if (inst == nullptr)
+			return;
+		if ((inst->choice != 1) && (inst->choice != 2))
+			return;
+		GameAvatar::Ptr avatar = getAvatar(inst->getPlayerId());
+		if (avatar)
+			doDisbandChoose(avatar->getSeat(), inst->choice);
 	}
 
 	void ChangShaMahjongRoom::doDisbandChoose(int seat, int choice) {
@@ -651,42 +1027,50 @@ namespace NiuMa
 			else if (_disbandChoices[i] == 2)
 				reject++;
 		}
-		// 通知所有人最新投票状态
-		for (int i = 0; i < 4; i++) {
-			GameAvatar::Ptr av = getAvatar(i);
-			if (av)
-				notifyDisbandVote(av->getPlayerId());
-		}
+		MsgDisbandChoice msg;
+		msg.seat = seat;
+		msg.choice = choice;
+		sendMessageToAll(msg);
 
 		if (agree >= 3) {
 			disbandRoom();
 		}
 		else if (reject >= 2) {
-			_disbandState = StageState::NotStarted;
-			_disbander = -1;
+			disbandObsolete();
 		}
 	}
 
 	void ChangShaMahjongRoom::disbandRoom() {
 		_disbandState = StageState::Finished;
+		MsgDisband msg;
+		sendMessageToAll(msg);
 		_roundState = StageState::NotStarted;
-		// 清理房间
-		clean();
+		kickAllAvatars();
+		gameOver();
 	}
 
 	void ChangShaMahjongRoom::disbandObsolete() {
-		// 超时解散
-		disbandRoom();
+		_disbandState = StageState::NotStarted;
+		_disbander = -1;
+		MsgDisbandObsolete msg;
+		sendMessageToAll(msg);
 	}
 
 	void ChangShaMahjongRoom::saveRoundRecord() {
 		auto task = std::make_shared<ChangShaMahjongRecordTask>();
 		task->_venueId = getId();
 		task->_roundNo = _roundNo;
-		task->_banker = _banker;
+		task->_banker = _backupBanker;
+
+		getPlaybackData(_playbackData);
+		_playbackData.qiShouHuSeat = _qiShouHuSeat;
+		_playbackData.qiShouHuType = _qiShouHuType;
+		_playbackData.birdTiles = _birdTiles;
+		_playbackData.hitSeats = _birdHitSeats;
+		_playbackData.birdMultiple = _birdMultiple;
 
 		// 生成随机种子hash
-		_playbackData.randomSeedHash = ReplayUtils::generateSeedHash(getId(), _roundNo, _banker);
+		_playbackData.randomSeedHash = ReplayUtils::generateSeedHash(getId(), _roundNo, _backupBanker);
 		task->_randomSeedHash = _playbackData.randomSeedHash;
 
 		int idx = 0;
@@ -696,6 +1080,8 @@ namespace NiuMa
 				task->_playerIds[idx] = avatar->getPlayerId();
 				task->_scores[idx] = avatar->getScore();
 				task->_winGolds[idx] = avatar->getWinGold();
+				_playbackData.scores[idx] = task->_scores[idx];
+				_playbackData.winGolds[idx] = task->_winGolds[idx];
 			}
 			idx++;
 		}

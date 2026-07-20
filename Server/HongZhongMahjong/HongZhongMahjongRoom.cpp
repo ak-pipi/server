@@ -74,7 +74,7 @@ namespace NiuMa
 		_allowChi = false;
 		_chi = false;
 		_dianPao = _allowDianPao;
-		setCashPledge(_diZhu * 50);
+		setCashPledge(_diZhu * 8);
 	}
 
 	HongZhongMahjongRoom::~HongZhongMahjongRoom()

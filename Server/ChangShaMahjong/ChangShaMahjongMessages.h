@@ -5,7 +5,7 @@
 #define _NIU_MA_CHANGSHA_MAHJONG_MESSAGES_H_
 
 #include "Mahjong/MahjongMessages.h"
-#include "../StandardMahjong/StandardMahjongMessages.h"
+#include "Mahjong/MahjongSettlement.h"
 
 namespace NiuMa
 {
@@ -24,7 +24,7 @@ namespace NiuMa
 	 * 请求同步长沙麻将数据
 	 * 客户端->服务器
 	 */
-	class MsgChangShaSync : public MsgMahjongSync {
+	class MsgChangShaSync : public MsgVenueInner {
 	public:
 		MsgChangShaSync() {}
 		virtual ~MsgChangShaSync() {}
@@ -39,13 +39,14 @@ namespace NiuMa
 	};
 
 	/**
-	 * 玩家准备消息
-	 * 客户端->服务器
+	 * 响应同步长沙麻将游戏数据
+	 * 服务器->客户端
 	 */
-	class MsgChangShaReady : public MsgMahjongSync {
+	class MsgChangShaSyncResp : public MsgBase
+	{
 	public:
-		MsgChangShaReady() {}
-		virtual ~MsgChangShaReady() {}
+		MsgChangShaSyncResp();
+		virtual ~MsgChangShaSyncResp();
 
 		static const std::string TYPE;
 
@@ -53,17 +54,51 @@ namespace NiuMa
 			return TYPE;
 		}
 
-		MSGPACK_DEFINE_MAP(playerId, timestamp, nonce, signature, venueId);
+		MSG_PACK_IMPL
+
+	public:
+		std::string number;
+		int64_t gold;
+		int64_t diamond;
+		int diZhu;
+		bool chi;
+		bool dianPao;
+		bool hasFetch;
+		int seat;
+		int roundState;
+		int disbandState;
+		int banker;
+		int playerCount;
+		int roundNo;
+		int roundCount;
+		int leftTiles;
+		int handTileNums[4];
+		MahjongTile fetchTile;
+		MahjongTileArray handTiles;
+		MahjongTileArray playedTiles[4];
+		MahjongChapterArray chapters[4];
+
+		int qiShouHuSeat;
+		int qiShouHuType;
+		int qiShouHuScore;
+		std::vector<int> birdTiles;
+		std::vector<int> hitSeats;
+		int birdMultiple;
+
+		MSGPACK_DEFINE_MAP(number, gold, diamond, diZhu, chi, dianPao, hasFetch,
+			seat, roundState, disbandState, banker, playerCount, roundNo, roundCount, leftTiles, handTileNums,
+			fetchTile, handTiles, playedTiles, chapters,
+			qiShouHuSeat, qiShouHuType, qiShouHuScore, birdTiles, hitSeats, birdMultiple);
 	};
 
 	/**
-	 * 解散投票请求
-	 * 客户端->服务器
+	 * 开始新一局
+	 * 服务器->客户端
 	 */
-	class MsgChangShaDisband : public MsgMahjongSync {
+	class MsgChangShaStartRound : public MsgBase {
 	public:
-		MsgChangShaDisband() {}
-		virtual ~MsgChangShaDisband() {}
+		MsgChangShaStartRound();
+		virtual ~MsgChangShaStartRound();
 
 		static const std::string TYPE;
 
@@ -71,10 +106,53 @@ namespace NiuMa
 			return TYPE;
 		}
 
-		// 1=发起解散，2=同意，3=拒绝
-		int choice;
+		MSG_PACK_IMPL
 
-		MSGPACK_DEFINE_MAP(playerId, timestamp, nonce, signature, venueId, choice);
+	public:
+		int banker;
+		int playerCount;
+		int roundNo;
+		int roundCount;
+		int birdCount;
+		bool zhongNiaoEnabled;
+		bool require258Jiang;
+
+		MSGPACK_DEFINE_MAP(banker, playerCount, roundNo, roundCount,
+			birdCount, zhongNiaoEnabled, require258Jiang);
+	};
+
+	/**
+	 * 结算数据
+	 * 服务器->客户端
+	 */
+	class MsgChangShaSettlement : public MsgBase
+	{
+	public:
+		MsgChangShaSettlement();
+		virtual ~MsgChangShaSettlement();
+
+		static const std::string TYPE;
+
+		virtual const std::string& getType() const {
+			return TYPE;
+		}
+
+		MSG_PACK_IMPL
+
+	public:
+		bool kick;
+		int64_t golds[4];
+		int winGolds[4];
+		std::vector<int> birdTiles;
+		std::vector<int> hitSeats;
+		int birdMultiple;
+		int qiShouHuSeat;
+		int qiShouHuType;
+		int qiShouHuScore;
+		MahjongSettlement data;
+
+		MSGPACK_DEFINE_MAP(kick, golds, winGolds, birdTiles, hitSeats, birdMultiple,
+			qiShouHuSeat, qiShouHuType, qiShouHuScore, data);
 	};
 
 	/**

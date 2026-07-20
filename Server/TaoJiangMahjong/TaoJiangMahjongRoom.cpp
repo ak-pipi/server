@@ -1198,8 +1198,8 @@ namespace NiuMa
 		if (!ruleConfig.empty())
 			parseRuleConfig(ruleConfig);
 
-		// 押金数额为底注的50倍
-		setCashPledge(_diZhu * 50);
+		// 押金数额为底注的8倍
+		setCashPledge(_diZhu * 8);
 	}
 
 	TaoJiangMahjongRoom::~TaoJiangMahjongRoom()
