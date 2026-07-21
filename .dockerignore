@@ -1,0 +1,20 @@
+# Local settings contain production credentials. The deployment script mounts them
+# at runtime, so they must never become part of a Docker build layer.
+Server/server.ini
+
+# Local build output and editor state are not needed to build the Linux image.
+.git
+.idea
+.vscode
+build
+bin
+log
+logs
+Server/log
+
+# These are macOS development artifacts. The Dockerfile builds Connector/C++ for
+# the target Linux image instead.
+3rdpart/mysql-concpp
+
+# Non-runtime material that makes the remote Docker build context unnecessarily large.
+*.docx

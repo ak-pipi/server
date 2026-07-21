@@ -15,3 +15,6 @@ bin/
 .vscode/
 logs/
 *.log
+
+# Private ECS database settings. Never commit credentials.
+deploy/mysql-server.ini

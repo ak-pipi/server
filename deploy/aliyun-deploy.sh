@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+# Deploy the C++ game server on an Alibaba Cloud ECS instance.
+# Run this script on the ECS from a checked-out copy of this repository.
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+RUNTIME_DIR="${RUNTIME_DIR:-/opt/niuma-game-server}"
+CONFIG_SOURCE="${CONFIG_SOURCE:-${PROJECT_DIR}/Server/server.ini}"
+IMAGE_NAME="${IMAGE_NAME:-niuma-game-server:latest}"
+CONTAINER_NAME="${CONTAINER_NAME:-niuma-game-server}"
+DEFAULT_PUBLIC_HOST="8.156.81.51"
+PUBLIC_HOST="${PUBLIC_HOST:-}"
+TCP_PORT="${TCP_PORT:-10086}"
+WS_PORT="${WS_PORT:-9098}"
+BUILD_JOBS="${BUILD_JOBS:-2}"
+SYNC_CONFIG=false
+SKIP_FIREWALL=false
+UPDATE_ENDPOINTS=false
+
+log() { printf '[%(%F %T)T] %s\n' -1 "$*"; }
+die() { printf '错误: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    cat <<'EOF'
+用法: sudo ./deploy/aliyun-deploy.sh <命令> [选项]
+
+命令:
+  install       安装 Docker、保存运行配置、构建并启动服务
+  update        重新构建并滚动更新容器（默认保留已部署配置）
+  restart       重启容器
+  stop          停止容器
+  status        显示容器状态和最近日志
+  logs          持续查看容器日志
+  backup        备份运行配置和日志（不包含 MySQL 数据）
+
+选项:
+  --config PATH        server.ini 的私有位置；install 时必填或使用默认文件
+  --public-host HOST   对客户端公布的域名/IP（install 默认 8.156.81.51）
+  --runtime-dir PATH   运行配置、日志和备份目录（默认 /opt/niuma-game-server）
+  --tcp-port PORT      TCP 游戏端口（默认 10086）
+  --ws-port PORT       WebSocket 端口（默认 9098）
+  --build-jobs N       Docker 构建并行数（默认 2，适合小规格 ECS）
+  --sync-config        update 时以 --config 覆盖运行中的 server.ini
+  --skip-firewall      不修改 ECS 本机防火墙
+
+示例:
+  sudo ./deploy/aliyun-deploy.sh install --config /root/niuma-server.ini
+  sudo ./deploy/aliyun-deploy.sh update
+EOF
+}
+
+require_root() {
+    [[ "${EUID}" -eq 0 ]] || die "请使用 sudo 运行此命令"
+}
+
+require_number() {
+    [[ "$2" =~ ^[1-9][0-9]*$ ]] || die "$1 必须是正整数"
+}
+
+ensure_docker() {
+    if command -v docker >/dev/null 2>&1; then
+        systemctl enable --now docker >/dev/null 2>&1 || true
+        return
+    fi
+
+    log "安装 Docker…"
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update
+        apt-get install -y ca-certificates curl docker.io
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y docker
+    else
+        die "仅支持 Ubuntu/Debian 或 Alibaba Cloud Linux/RHEL 系统"
+    fi
+    systemctl enable --now docker
+}
+
+open_local_firewall() {
+    ${SKIP_FIREWALL} && return
+
+    if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+        firewall-cmd --permanent --add-port="${TCP_PORT}/tcp"
+        firewall-cmd --permanent --add-port="${WS_PORT}/tcp"
+        firewall-cmd --reload
+    elif command -v ufw >/dev/null 2>&1 && ufw status | grep -q 'Status: active'; then
+        ufw allow "${TCP_PORT}/tcp"
+        ufw allow "${WS_PORT}/tcp"
+    else
+        log "未检测到启用的本机防火墙；仍需在阿里云安全组放行 ${TCP_PORT}/tcp 和 ${WS_PORT}/tcp。"
+    fi
+}
+
+set_ini_value() {
+    local file="$1" section="$2" key="$3" value="$4" temporary
+    temporary="${file}.tmp.$$"
+    if ! awk -v wanted_section="$section" -v wanted_key="$key" -v wanted_value="$value" '
+        $0 == "[" wanted_section "]" { in_section = 1 }
+        /^\[/ && $0 != "[" wanted_section "]" { in_section = 0 }
+        in_section && $0 ~ "^[[:space:]]*" wanted_key "[[:space:]]*=" {
+            print wanted_key "=" wanted_value
+            changed = 1
+            next
+        }
+        { print }
+        END { if (!changed) exit 2 }
+    ' "$file" > "$temporary"; then
+        rm -f "$temporary"
+        die "配置文件缺少 [${section}] 中的 ${key}"
+    fi
+    chmod 600 "$temporary"
+    mv "$temporary" "$file"
+}
+
+check_config() {
+    [[ -f "$CONFIG_SOURCE" ]] || die "找不到配置文件：${CONFIG_SOURCE}"
+    if grep -Eq '=[[:space:]]*(CHANGE_ME|REPLACE_ME)[[:space:]]*$' "$CONFIG_SOURCE"; then
+        die "配置文件仍有 CHANGE_ME/REPLACE_ME，请补全后再部署"
+    fi
+}
+
+prepare_runtime_config() {
+    local deployed_config="${RUNTIME_DIR}/config/server.ini"
+    mkdir -p "${RUNTIME_DIR}/config" "${RUNTIME_DIR}/log" "${RUNTIME_DIR}/backup"
+
+    if [[ ! -f "$deployed_config" || "$SYNC_CONFIG" == true ]]; then
+        check_config
+        install -m 600 "$CONFIG_SOURCE" "$deployed_config"
+    fi
+
+    # update does not silently replace the address kept in a working production config.
+    if [[ "$UPDATE_ENDPOINTS" == true ]]; then
+        PUBLIC_HOST="${PUBLIC_HOST:-$DEFAULT_PUBLIC_HOST}"
+        set_ini_value "$deployed_config" "Server" "port" "$TCP_PORT"
+        set_ini_value "$deployed_config" "Server" "access_address" "${PUBLIC_HOST}:${TCP_PORT}"
+        set_ini_value "$deployed_config" "Server" "ws_address" "ws://${PUBLIC_HOST}:${WS_PORT}/"
+        set_ini_value "$deployed_config" "Websocket" "port" "$WS_PORT"
+    fi
+}
+
+build_image() {
+    [[ -f "${PROJECT_DIR}/Dockerfile" ]] || die "Dockerfile 不存在：${PROJECT_DIR}/Dockerfile"
+    log "构建镜像（首次构建会下载编译依赖，耗时较长）…"
+    docker build --pull --build-arg "BUILD_JOBS=${BUILD_JOBS}" --tag "$IMAGE_NAME" "$PROJECT_DIR"
+}
+
+start_container() {
+    local config_file="${RUNTIME_DIR}/config/server.ini"
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+    # Host network keeps 127.0.0.1 in server.ini pointing to MySQL on this ECS.
+    docker run -d \
+        --name "$CONTAINER_NAME" \
+        --network host \
+        --restart unless-stopped \
+        --mount "type=bind,src=${config_file},dst=/app/server.ini,readonly" \
+        --mount "type=bind,src=${RUNTIME_DIR}/log,dst=/app/log" \
+        --log-driver json-file \
+        --log-opt max-size=100m \
+        --log-opt max-file=3 \
+        "$IMAGE_NAME" >/dev/null
+
+    sleep 5
+    docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME" | grep -qx true || {
+        docker logs --tail 100 "$CONTAINER_NAME" >&2 || true
+        die "容器未能启动；上方为最近 100 行日志"
+    }
+}
+
+install_or_update() {
+    require_number "--tcp-port" "$TCP_PORT"
+    require_number "--ws-port" "$WS_PORT"
+    require_number "--build-jobs" "$BUILD_JOBS"
+    ensure_docker
+    open_local_firewall
+    prepare_runtime_config
+    build_image
+    start_container
+    log "部署完成；请使用 status 或 logs 确认服务连接到了 MySQL、Redis 和 RabbitMQ。"
+}
+
+show_status() {
+    docker ps --filter "name=^/${CONTAINER_NAME}$" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+    docker logs --tail 50 "$CONTAINER_NAME" 2>&1 || true
+}
+
+backup() {
+    local timestamp archive
+    [[ -d "$RUNTIME_DIR" ]] || die "运行目录不存在：${RUNTIME_DIR}"
+    timestamp="$(date +%Y%m%d_%H%M%S)"
+    archive="${RUNTIME_DIR}/backup/game-server_${timestamp}.tar.gz"
+    tar -C "$RUNTIME_DIR" -czf "$archive" config log
+    find "${RUNTIME_DIR}/backup" -type f -name 'game-server_*.tar.gz' -mtime +14 -delete
+    log "备份已创建：${archive}（不包含 MySQL、Redis 或 RabbitMQ 数据）"
+}
+
+ACTION="${1:-install}"
+if [[ $# -gt 0 ]]; then
+    shift
+fi
+
+case "$ACTION" in
+    help|-h|--help)
+        usage
+        exit 0
+        ;;
+esac
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --config|--public-host|--runtime-dir|--tcp-port|--ws-port|--build-jobs)
+            [[ $# -ge 2 ]] || die "选项 $1 缺少参数"
+            case "$1" in
+                --config) CONFIG_SOURCE="$2" ;;
+                --public-host) PUBLIC_HOST="$2"; UPDATE_ENDPOINTS=true ;;
+                --runtime-dir) RUNTIME_DIR="$2" ;;
+                --tcp-port) TCP_PORT="$2"; UPDATE_ENDPOINTS=true ;;
+                --ws-port) WS_PORT="$2"; UPDATE_ENDPOINTS=true ;;
+                --build-jobs) BUILD_JOBS="$2" ;;
+            esac
+            shift 2
+            ;;
+        --sync-config) SYNC_CONFIG=true; shift ;;
+        --skip-firewall) SKIP_FIREWALL=true; shift ;;
+        -h|--help|help) usage; exit 0 ;;
+        *) die "未知选项：$1" ;;
+    esac
+done
+
+if [[ "$ACTION" == "install" ]]; then
+    SYNC_CONFIG=true
+    UPDATE_ENDPOINTS=true
+fi
+
+require_root
+case "$ACTION" in
+    install|update) install_or_update ;;
+    restart) docker restart "$CONTAINER_NAME" ;;
+    stop) docker stop "$CONTAINER_NAME" ;;
+    status) show_status ;;
+    logs) docker logs -f "$CONTAINER_NAME" ;;
+    backup) backup ;;
+    *) usage; exit 1 ;;
+esac

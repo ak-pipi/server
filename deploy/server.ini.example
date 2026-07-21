@@ -1,0 +1,48 @@
+; Copy this file to a private location on the ECS, replace every
+; CHANGE_ME value, then pass it to aliyun-deploy.sh with --config.
+; Do not commit the completed file.
+
+[Server]
+server_id=game_server_001
+port=10086
+thread_num=4
+timer_threads=3
+access_address=8.156.81.51:10086
+ws_address=ws://8.156.81.51:9098/
+outter_threads=3
+inner_threads=4
+
+[Websocket]
+port=9098
+thread_num=2
+
+; With host networking, 127.0.0.1 means MySQL on this ECS host.
+[Mysql]
+host=tcp://127.0.0.1:3306
+username=CHANGE_ME
+password=CHANGE_ME
+schema=niuma
+keep_connections=3
+max_connections=20
+thread_num=2
+
+[Redis]
+host=8.156.81.51
+port=6379
+password=CHANGE_ME
+database=9
+keep_connections=3
+max_connections=20
+
+[RabbitMQ]
+host=8.156.81.51
+port=5672
+vhost=niuma
+username=CHANGE_ME
+password=CHANGE_ME
+fanout_exchange=game.fanout
+fanout_queue=game.fanout.queue.001
+fanout_consumer_tag=game.fanout.tag
+direct_exchange=game.direct
+direct_queue=game.direct.queue.001
+direct_consumer_tag=game.direct.tag.001
