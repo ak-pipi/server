@@ -579,6 +579,205 @@ namespace NiuMa
 		return canDianPao() && avatar->canHu(mt) && avatar->canDianPao(mt, passed) && shouldAllowDianPaoForAvatar(avatar, mt);
 	}
 
+	bool HongZhongMahjongRoom::executeGang() {
+		if (!_acOps1[0].empty())
+			return false;
+		if (_acOps2[1].empty())
+			return false;
+
+		std::vector<int> qiangGangSeats;
+		std::stringstream ss;
+		const MahjongActionOption& acOp = _acOpPool[_acOps2[1].at(0)];
+		HongZhongMahjongAvatar* avatar = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(acOp.getPlayer()).get());
+		if (avatar == nullptr)
+			return false;
+
+		MahjongTile mt;
+		MahjongAction ma;
+		mt.setId(acOp.getTileId1());
+		_dealer.getTile(mt);
+		ma.setTile(acOp.getTileId1());
+
+		if (acOp.getType() == MahjongAction::Type::ZhiGang) {
+			if (!avatar->doZhiGang(mt, static_cast<int>(_actions.size()), _actor)) {
+				ss << "逻辑错误，牌桌(Id: " << getId() << ")玩家(Id: " << avatar->getPlayerId() << ")直杠失败!";
+				LOG_ERROR(ss.str());
+				return false;
+			}
+			ma.setType(MahjongAction::Type::ZhiGang);
+			ma.setSlot(static_cast<int>(_actors.size()));
+
+			MahjongAvatar* currentAvatar = dynamic_cast<MahjongAvatar*>(getAvatar(_actor).get());
+			if (currentAvatar != nullptr)
+				currentAvatar->setPlayedTileAction(mt.getId(), MahjongAction::Type::ZhiGang, acOp.getPlayer());
+		}
+		else if (acOp.getType() == MahjongAction::Type::JiaGang) {
+			for (int i = 0; i < getMaxPlayerNums(); i++) {
+				if (i == acOp.getPlayer())
+					continue;
+				MahjongAvatar* other = dynamic_cast<MahjongAvatar*>(getAvatar(i).get());
+				if (other != nullptr && other->canHu(mt))
+					qiangGangSeats.push_back(i);
+			}
+			if (!avatar->doJiaGang(mt, static_cast<int>(_actions.size()))) {
+				ss << "逻辑错误，牌桌(Id: " << getId() << ")玩家(Id: " << avatar->getPlayerId() << ")加杠失败!";
+				LOG_ERROR(ss.str());
+				return false;
+			}
+			ma.setType(MahjongAction::Type::JiaGang);
+			ma.setSlot(static_cast<int>(_actors.size() - 1));
+		}
+		else if (acOp.getType() == MahjongAction::Type::AnGang) {
+			if (!avatar->doAnGang(mt, static_cast<int>(_actions.size()))) {
+				ss << "逻辑错误，牌桌(Id: " << getId() << ")玩家(Id: " << avatar->getPlayerId() << ")暗杠失败!";
+				LOG_ERROR(ss.str());
+				return false;
+			}
+			ma.setType(MahjongAction::Type::AnGang);
+			ma.setSlot(static_cast<int>(_actors.size() - 1));
+		}
+		else {
+			ss << "逻辑错误，牌桌(Id: " << getId() << ")玩家(Id: " << avatar->getPlayerId() << ")杠牌出错!";
+			LOG_ERROR(ss.str());
+			return false;
+		}
+
+		_rule->checkTingPai(avatar->getTiles(), avatar->getGangTiles(), avatar->getTingTiles(), avatar);
+		clearActionOptions();
+		notifyActionOptionsFinish();
+		notifyGangTile(avatar);
+		notifyTingTile(avatar);
+
+		if (acOp.getType() == MahjongAction::Type::ZhiGang)
+			updateCurrentActor(acOp.getPlayer());
+		_actions.push_back(ma);
+
+		if (!qiangGangSeats.empty()) {
+			notifyActionOptionsWaiting(avatar);
+			for (int seat : qiangGangSeats) {
+				MahjongAvatar* other = dynamic_cast<MahjongAvatar*>(getAvatar(seat).get());
+				if (other == nullptr || !other->canHu(mt))
+					continue;
+				int actionId = _acOpIdAlloc.askForId();
+				if (actionId >= ACTION_OPTION_POOL_SIZE) {
+					LOG_ERROR("逻辑错误，动作id大于动作选项池大小");
+					return false;
+				}
+				_waitingQiangGang = true;
+				_acOpPool[actionId].setType(MahjongAction::Type::DianPao);
+				_acOpPool[actionId].setId(actionId);
+				_acOpPool[actionId].setPlayer(seat);
+				_acOpPool[actionId].setTileId1(mt.getId());
+				_acOps1[0].push_back(actionId);
+				other->addActionOption(actionId);
+				notifyActionOptions(other);
+			}
+			if (_waitingQiangGang) {
+				changeState(StateMachine::Action);
+				return true;
+			}
+		}
+
+		applyGangScore(avatar);
+		fetchTile(true);
+		return true;
+	}
+
+	void HongZhongMahjongRoom::passActionOption(const std::string& playerId) {
+		MahjongAvatar* avatar = dynamic_cast<MahjongAvatar*>(getAvatar(playerId).get());
+		if ((avatar == nullptr) || !(avatar->hasActionOption()))
+			return;
+
+		MahjongTile mt;
+		const std::vector<int>& actionOptions = avatar->getAllActionOptions();
+		std::vector<int>::const_iterator it = actionOptions.begin();
+		while (it != actionOptions.end()) {
+			const MahjongActionOption& mao = _acOpPool[*it];
+			if (mao.getType() == MahjongAction::Type::DianPao) {
+				mt.setId(mao.getTileId1());
+				if (_dealer.getTileById(mt))
+					avatar->passDianPao(mt);
+			}
+			else if (mao.getType() == MahjongAction::Type::Peng) {
+				mt.setId(mao.getTileId1());
+				if (_dealer.getTileById(mt))
+					avatar->passPeng(mt);
+			}
+			++it;
+		}
+
+		clearActionOptions(avatar);
+		bool executed = executeActionOptions();
+		if (executed)
+			return;
+
+		if (_waitingQiangGang) {
+			if (!_acOps1[0].empty())
+				return;
+
+			if (!_actions.empty()) {
+				const MahjongAction& ma = _actions.back();
+				if (ma.getType() == MahjongAction::Type::JiaGang || ma.getType() == MahjongAction::Type::ZhiGang) {
+					_waitingQiangGang = false;
+					HongZhongMahjongAvatar* gangAvatar = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(_actor).get());
+					applyGangScore(gangAvatar);
+					fetchTile(true);
+					return;
+				}
+			}
+
+			LOG_ERROR("逻辑错误，当前正等待玩家抢杠，然而动作列表中最后一个动作却不是加杠！");
+			return;
+		}
+
+		bool hasActionOption = false;
+		for (unsigned int i = 0; i < 4; i++) {
+			if (!_acOps1[i].empty()) {
+				hasActionOption = true;
+				break;
+			}
+		}
+		if (!hasActionOption) {
+			if (avatar->getSeat() == _actor) {
+				int id = _acOpIdAlloc.askForId();
+				if (id >= ACTION_OPTION_POOL_SIZE) {
+					LOG_ERROR("逻辑错误，动作id大于动作选项池大小");
+					return;
+				}
+				_acOpPool[id].setType(MahjongAction::Type::Play);
+				_acOpPool[id].setId(id);
+				_acOpPool[id].setPlayer(_actor);
+				avatar->addActionOption(id);
+				notifyActionOptions(avatar);
+				changeState(StateMachine::Play);
+			}
+			else {
+				if (!fetchAgainAfterPlay())
+					updateCurrentActor();
+				fetchTile();
+			}
+		}
+		else {
+			changeState(StateMachine::Action);
+		}
+	}
+
+	void HongZhongMahjongRoom::applyGangScore(HongZhongMahjongAvatar* gangAvatar) {
+		if (gangAvatar == nullptr)
+			return;
+		const int gangSeat = gangAvatar->getSeat();
+		const int score = 2;
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			if (i == gangSeat)
+				continue;
+			HongZhongMahjongAvatar* other = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(i).get());
+			if (other == nullptr)
+				continue;
+			gangAvatar->addLoseScore(i, -score);
+			other->addLoseScore(gangSeat, score);
+		}
+	}
+
 	HongZhongMahjongAvatar* HongZhongMahjongRoom::findOpeningFourHongZhongAvatar() const {
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			HongZhongMahjongAvatar* avatar = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(i).get());
@@ -624,44 +823,51 @@ namespace NiuMa
 	}
 
 	void HongZhongMahjongRoom::calcHuScore() const {
-		if (!_hu)
-			return;
 		int score = 0;
-		int scores[4] = { 0, 0, 0, 0 };
 		HongZhongMahjongAvatar* avatar1 = nullptr;
 		HongZhongMahjongAvatar* avatar2 = nullptr;
-		ensureBirdTile();
-		for (int i = 0; i < getMaxPlayerNums(); i++) {
-			avatar1 = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(i).get());
-			if (avatar1 == nullptr)
-				continue;
-			if (avatar1->isHu()) {
-				avatar1->setBirdMultiplier(_birdMultiplier);
-				score = avatar1->calcHuScore();
-				if (_maxScore > 0 && score > _maxScore)
-					score = _maxScore;
-				if (avatar1->isDianPao()) {
-					// 点炮，放炮者一人承担
-					avatar2 = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(_actor).get());
-					if (avatar2 != nullptr) {
-						avatar1->addLoseScore(_actor, -score);
-						avatar2->addLoseScore(i, score);
+
+		if (_hu) {
+			ensureBirdTile();
+			for (int i = 0; i < getMaxPlayerNums(); i++) {
+				avatar1 = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(i).get());
+				if (avatar1 == nullptr)
+					continue;
+				if (avatar1->isHu()) {
+					avatar1->setBirdMultiplier(_birdMultiplier);
+					score = avatar1->calcHuScore();
+					if (_maxScore > 0 && score > _maxScore)
+						score = _maxScore;
+					if (avatar1->isDianPao()) {
+						// 点炮，放炮者一人承担
+						avatar2 = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(_actor).get());
+						if (avatar2 != nullptr) {
+							avatar1->addLoseScore(_actor, -score);
+							avatar2->addLoseScore(i, score);
+						}
 					}
-				}
-				else {
-					// 自摸，其余玩家各承担一份
-					for (int j = 0; j < getMaxPlayerNums(); j++) {
-						if (i == j)
-							continue;
-						avatar2 = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(j).get());
-						if (avatar2 == nullptr)
-							continue;
-						avatar1->addLoseScore(j, -score);
-						avatar2->addLoseScore(i, score);
+					else {
+						// 自摸，其余玩家各承担一份
+						for (int j = 0; j < getMaxPlayerNums(); j++) {
+							if (i == j)
+								continue;
+							avatar2 = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(j).get());
+							if (avatar2 == nullptr)
+								continue;
+							avatar1->addLoseScore(j, -score);
+							avatar2->addLoseScore(i, score);
+						}
 					}
 				}
 			}
 		}
+
+		settleScoresFromLoseScores();
+	}
+
+	void HongZhongMahjongRoom::settleScoresFromLoseScores() const {
+		int scores[4] = { 0, 0, 0, 0 };
+		HongZhongMahjongAvatar* avatar1 = nullptr;
 		// 汇总分数
 		int loseScores[4] = { 0 };
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
@@ -757,15 +963,16 @@ namespace NiuMa
 	void HongZhongMahjongRoom::doJieSuan() {
 		_roundState = StageState::NotStarted;
 		const bool allRoundsFinished = (_roundCount > 0 && _roundNo >= _roundCount);
-		ensureBirdTile();
+		if (_hu)
+			ensureBirdTile();
 
 		MsgHZSettlement msg;
 		getSettlementData(&(msg.data));
-		if (_birdTileId != MahjongTile::INVALID_ID) {
+		if (_hu && _birdTileId != MahjongTile::INVALID_ID) {
 			msg.birdTile.setId(_birdTileId);
 			MahjongDealer::getTileById(msg.birdTile);
 		}
-		msg.birdMultiplier = _birdMultiplier;
+		msg.birdMultiplier = _hu ? _birdMultiplier : 1;
 
 		double delta = 0.0;
 		int64_t cashPledge = 0LL;
@@ -924,11 +1131,11 @@ namespace NiuMa
 		HongZhongMahjongPlaybackData data;
 		getSettlementData(&(data.settlement));
 		getPlaybackData(data);
-		if (_birdTileId != MahjongTile::INVALID_ID) {
+		if (_hu && _birdTileId != MahjongTile::INVALID_ID) {
 			data.birdTile.setId(_birdTileId);
 			MahjongDealer::getTileById(data.birdTile);
 		}
-		data.birdMultiplier = _birdMultiplier;
+		data.birdMultiplier = _hu ? _birdMultiplier : 1;
 		HongZhongMahjongAvatar* avatar = nullptr;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			avatar = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(i).get());

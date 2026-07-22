@@ -39,19 +39,21 @@ namespace NiuMa
 		virtual double* getDistances() override;
 		virtual void getDistances(std::vector<int>& distances) const override;
 		virtual int getDistanceIndex(int seat1, int seat2) const override;
-			virtual void calcHuScore() const override;
-			virtual void doJieSuan() override;
-			virtual void afterHu() override;
-			virtual bool fetchTile(bool bBack = false) override;
-			virtual void dealTiles() override;
-			virtual bool earlyTermination() const override;
-			virtual bool shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const MahjongTile& mt) const override;
-			virtual bool canCreateDianPaoOption(MahjongAvatar* pAvatar, const MahjongTile& mt, std::string& passed) const override;
-			virtual void notifyFetchTile(MahjongAvatar* pAvatar, bool bBack) override;
+		virtual void calcHuScore() const override;
+		virtual void doJieSuan() override;
+		virtual void afterHu() override;
+		virtual bool fetchTile(bool bBack = false) override;
+		virtual void dealTiles() override;
+		virtual bool earlyTermination() const override;
+		virtual bool executeGang() override;
+		virtual void passActionOption(const std::string& playerId) override;
+		virtual bool shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, const MahjongTile& mt) const override;
+		virtual bool canCreateDianPaoOption(MahjongAvatar* pAvatar, const MahjongTile& mt, std::string& passed) const override;
+		virtual void notifyFetchTile(MahjongAvatar* pAvatar, bool bBack) override;
 
-		private:
-			static int resolvePlayerCount(const std::string& ruleConfig);
-			void parseRuleConfig(const std::string& ruleConfig);
+	private:
+		static int resolvePlayerCount(const std::string& ruleConfig);
+		void parseRuleConfig(const std::string& ruleConfig);
 		void onSyncMahjong(const NetMessage::Ptr& netMsg);
 		void onPlayerReady(const NetMessage::Ptr& netMsg);
 		void onDisbandRequest(const NetMessage::Ptr& netMsg);
@@ -60,20 +62,22 @@ namespace NiuMa
 		void notifyDisbandVote(const std::string& playerId);
 		void doDisbandChoose(int seat, int choice);
 		void disbandRoom();
-			void disbandObsolete();
-			void saveRoundRecord();
-			void shuffleHongZhongTiles();
-			bool fetchHongZhongTile(MahjongTile& mt, bool bBack = false);
-			bool fetchHongZhongTile(MahjongTile& mt, const std::string& tileName);
-			int getHongZhongTileLeft() const;
-			int getBirdMultiplier(const MahjongTile& mt) const;
-			void ensureBirdTile() const;
-			bool hasHongZhongInHand(MahjongAvatar* pAvatar) const;
-			bool isCheckingQiangGang() const;
-			HongZhongMahjongAvatar* findOpeningFourHongZhongAvatar() const;
-			void doOpeningFourHongZhongHu(HongZhongMahjongAvatar* avatar);
+		void disbandObsolete();
+		void saveRoundRecord();
+		void shuffleHongZhongTiles();
+		bool fetchHongZhongTile(MahjongTile& mt, bool bBack = false);
+		bool fetchHongZhongTile(MahjongTile& mt, const std::string& tileName);
+		int getHongZhongTileLeft() const;
+		int getBirdMultiplier(const MahjongTile& mt) const;
+		void ensureBirdTile() const;
+		bool hasHongZhongInHand(MahjongAvatar* pAvatar) const;
+		bool isCheckingQiangGang() const;
+		void applyGangScore(HongZhongMahjongAvatar* gangAvatar);
+		void settleScoresFromLoseScores() const;
+		HongZhongMahjongAvatar* findOpeningFourHongZhongAvatar() const;
+		void doOpeningFourHongZhongHu(HongZhongMahjongAvatar* avatar);
 
-		private:
+	private:
 		const std::string _number;
 		const int _level;
 		StageState _roundState;
@@ -99,15 +103,15 @@ namespace NiuMa
 		bool _qiduiEnabled;
 		bool _pengpenghuEnabled;
 		bool _zimoDouble;
-			bool _dissolveVote;
-			int _bankerRule;
+		bool _dissolveVote;
+		int _bankerRule;
 
-			int _tilePool[112];
-			int _tileStart;
-			int _tileEnd;
-			mutable int _birdTileId;
-			mutable int _birdMultiplier;
-		};
-	}
+		int _tilePool[112];
+		int _tileStart;
+		int _tileEnd;
+		mutable int _birdTileId;
+		mutable int _birdMultiplier;
+	};
+}
 
 #endif // !_NIU_MA_HONGZHONG_MAHJONG_ROOM_H_
