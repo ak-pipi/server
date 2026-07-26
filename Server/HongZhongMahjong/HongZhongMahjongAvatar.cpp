@@ -37,7 +37,6 @@ namespace NiuMa
 			((_huStyle & pengPengHu) == pengPengHu) ||
 			((_huStyle & qingYiSe) == qingYiSe);
 		int score = bigHu ? 5 : 4;
-		score *= std::max(1, _birdMultiplier);
 		if (_huHongZhongCount == 0)
 			score *= 2;
 		return score;

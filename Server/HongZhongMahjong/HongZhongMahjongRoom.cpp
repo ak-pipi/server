@@ -838,6 +838,7 @@ namespace NiuMa
 					score = avatar1->calcHuScore();
 					if (_maxScore > 0 && score > _maxScore)
 						score = _maxScore;
+					score *= std::max(1, _birdMultiplier);
 					if (avatar1->isDianPao()) {
 						// 点炮，放炮者一人承担
 						avatar2 = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(_actor).get());
