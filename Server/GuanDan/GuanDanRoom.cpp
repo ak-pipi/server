@@ -23,12 +23,37 @@
 
 namespace NiuMa
 {
-	GuanDanRoom::GuanDanRoom(const std::string& venueId, const std::string& number, int lvl)
+	namespace
+	{
+		int readPositiveInt(const Json::Value& root, const char* key, int defaultValue)
+		{
+			if (!root.isMember(key))
+				return defaultValue;
+			int value = root[key].asInt();
+			return value > 0 ? value : defaultValue;
+		}
+
+		int64_t readRoomFeeAmount(const Json::Value& root)
+		{
+			if (root.isMember("room_fee") && root["room_fee"].isInt64())
+				return root["room_fee"].asInt64();
+			if (root.isMember("room_fee") && root["room_fee"].isInt())
+				return root["room_fee"].asInt();
+			if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
+				return root["room_fee_type"].asInt();
+			return 0;
+		}
+	}
+
+	GuanDanRoom::GuanDanRoom(const std::string& venueId, const std::string& number, int lvl, const std::string& ruleConfig)
 		: GameRoom(venueId, static_cast<int>(GameType::GuanDan), 4)
 		, _number(number)
-		, _ownerSeat(-1)
+		, _ruleConfig(ruleConfig)
 		, _level(lvl)
+		, _ownerSeat(-1)
 		, _roundNo(0)
+		, _roundLimit(8)
+		, _roomFee(0)
 		, _gameState(GameState::Sitting)
 		, _tribute(0)
 		, _current(-1)
@@ -54,9 +79,11 @@ namespace NiuMa
 		for (int i = 0; i < 4; i++) {
 			_lastFinishedSeats[i] = -1;
 			_finishedSeats[i] = -1;
+			_totalNetWins[i] = 0;
 			_kicks[i] = false;
 			_disbandChoises[i] = 0;
 		}
+		parseRuleConfig(ruleConfig);
 		if (_level != static_cast<int>(GuanDanRoomLevel::Practice))
 			setDiamondNeed(2);
 	}
@@ -643,6 +670,24 @@ namespace NiuMa
 				_roundNo = task->_maxRoundNo;
 		}
 		_roundNo++;
+	}
+
+	void GuanDanRoom::parseRuleConfig(const std::string& cfg) {
+		if (cfg.empty())
+			return;
+		Json::Value root;
+		Json::CharReaderBuilder builder;
+		Json::CharReader* reader = builder.newCharReader();
+		std::string errs;
+		if (!reader->parse(cfg.c_str(), cfg.c_str() + cfg.size(), &root, &errs)) {
+			delete reader;
+			return;
+		}
+		delete reader;
+		_roundLimit = readPositiveInt(root, "round_count", _roundLimit);
+		int64_t roomFee = readRoomFeeAmount(root);
+		if (roomFee >= 0)
+			_roomFee = roomFee;
 	}
 
 	void GuanDanRoom::deductDiamond() {
@@ -1963,6 +2008,13 @@ namespace NiuMa
 			if (_gradePointNext > static_cast<int>(PokerPoint::King))
 				_gradePointNext = static_cast<int>(PokerPoint::Ace);	// 升级不能跳过A
 		}
+		int winnerFriend = getFriendSeat(seat1);
+		for (int i = 0; i < 4; i++) {
+			if (i == seat1 || i == winnerFriend)
+				_totalNetWins[i] += 1;
+			else
+				_totalNetWins[i] -= 1;
+		}
 		MsgGuanDanResult msg;
 		for (int i = 0; i < 4; i++) {
 			msg.finishedSeats[i] = _finishedSeats[i];
@@ -1970,6 +2022,11 @@ namespace NiuMa
 		}
 		msg.gradePointNext = _gradePointNext;
 		sendMessageToAll(msg);
+		if (_roundLimit > 0 && _roundNo >= _roundLimit) {
+			publishFinalRoomFee();
+			gameOver();
+			return;
+		}
 		for (int i = 0; i < 4; i++) {
 			GameAvatar::Ptr ptr = getAvatar(i);
 			if (!ptr)
@@ -2071,9 +2128,23 @@ namespace NiuMa
 
 		_gameState = GameState::Waiting;
 
+		publishFinalRoomFee();
 		kickAllAvatars();
 		// 在解散房间后游戏结束
 		gameOver();
+	}
+
+	void GuanDanRoom::publishFinalRoomFee() {
+		if (_roundNo <= 0)
+			return;
+		std::vector<std::pair<std::string, int64_t>> netWins;
+		for (int i = 0; i < 4; i++) {
+			GameAvatar::Ptr avatar = getAvatar(i);
+			if (!avatar)
+				continue;
+			netWins.emplace_back(avatar->getPlayerId(), _totalNetWins[i]);
+		}
+		publishRoomFeeOnGameOver(_roomFee, netWins, "GuanDan", "掼蛋整场房费");
 	}
 
 	void GuanDanRoom::disbandObsolete() {

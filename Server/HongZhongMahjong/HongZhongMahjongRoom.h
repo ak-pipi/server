@@ -61,10 +61,11 @@ namespace NiuMa
 		void startRound();
 		void notifyDisbandVote(const std::string& playerId);
 		void doDisbandChoose(int seat, int choice);
-		void disbandRoom();
-		void disbandObsolete();
-		void saveRoundRecord();
-		void shuffleHongZhongTiles();
+			void disbandRoom();
+			void disbandObsolete();
+			void saveRoundRecord();
+			void publishFinalRoomFee();
+			void shuffleHongZhongTiles();
 		bool fetchHongZhongTile(MahjongTile& mt, bool bBack = false);
 		bool fetchHongZhongTile(MahjongTile& mt, const std::string& tileName);
 		int getHongZhongTileLeft() const;
@@ -90,11 +91,11 @@ namespace NiuMa
 		double _distances[6];
 		bool _kicks[4];
 
-		// 玩法配置
-		int _diZhu;
-		int _maxScore;
-		int _roomFeeType;
-		int _roundCount;
+			// 玩法配置
+			int _diZhu;
+			int _maxScore;
+			int64_t _roomFee;
+			int _roundCount;
 		bool _allowChi;
 		bool _allowPeng;
 		bool _allowGang;
@@ -108,10 +109,11 @@ namespace NiuMa
 
 		int _tilePool[112];
 		int _tileStart;
-		int _tileEnd;
-		mutable int _birdTileId;
-		mutable int _birdMultiplier;
-	};
+			int _tileEnd;
+			mutable int _birdTileId;
+			mutable int _birdMultiplier;
+			int64_t _totalWinGolds[4];
+		};
 }
 
 #endif // !_NIU_MA_HONGZHONG_MAHJONG_ROOM_H_

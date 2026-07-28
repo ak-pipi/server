@@ -14,6 +14,7 @@ namespace NiuMa
 	const std::string MsgPaoDeKuaiPlayNotify::TYPE = "PaoDeKuai.PlayNotify";
 	const std::string MsgPaoDeKuaiPlayFailed::TYPE = "PaoDeKuai.PlayFailed";
 	const std::string MsgPaoDeKuaiSettlement::TYPE = "PaoDeKuai.Settlement";
+	const std::string MsgPaoDeKuaiDisbandVote::TYPE = "PaoDeKuai.DisbandVote";
 
 	MsgPaoDeKuaiSyncResp::MsgPaoDeKuaiSyncResp()
 		: gameState(0)
@@ -64,6 +65,14 @@ namespace NiuMa
 			scores[i] = 0;
 			winGolds[i] = 0;
 		}
+	}
+
+	MsgPaoDeKuaiDisbandVote::MsgPaoDeKuaiDisbandVote()
+		: disbander(-1)
+		, remainTime(300)
+	{
+		choices[0] = 0;
+		choices[1] = 0;
 	}
 
 	void PaoDeKuaiMessages::registMessages() {

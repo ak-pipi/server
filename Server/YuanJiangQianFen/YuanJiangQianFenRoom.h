@@ -47,8 +47,9 @@ namespace NiuMa
 		void beginPlay();
 		void doPlay(int seat, const std::vector<int>& cardIds);
 		void settleRound();
-		void checkGameEnd();
-		void saveRoundRecord();
+			void checkGameEnd();
+			void saveRoundRecord();
+			void publishFinalRoomFee();
 
 		int getNextSeat(int seat) const { return (seat + 1) % _playerCount; }
 		bool allReady() const;
@@ -97,10 +98,11 @@ namespace NiuMa
 		int _deckCount;
 		bool _bombEnabled;
 		std::unordered_map<int, int> _scoreCardMap; // point -> score
-		int _roundLimit;
-		int _maxScore;
+			int _roundLimit;
+			int _maxScore;
+			int64_t _roomFee;
 
-		QianFenPlaybackData _playbackData;
+			QianFenPlaybackData _playbackData;
 
 		// 风控数据采集
 		RiskControlCollector _riskCollector;

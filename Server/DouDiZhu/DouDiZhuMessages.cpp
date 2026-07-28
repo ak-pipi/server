@@ -18,6 +18,7 @@ namespace NiuMa
 	const std::string MsgDouDiZhuPlayNotify::TYPE = "DouDiZhu.PlayNotify";
 	const std::string MsgDouDiZhuPlayFailed::TYPE = "DouDiZhu.PlayFailed";
 	const std::string MsgDouDiZhuSettlement::TYPE = "DouDiZhu.Settlement";
+	const std::string MsgDouDiZhuDisbandVote::TYPE = "DouDiZhu.DisbandVote";
 
 	MsgDouDiZhuSyncResp::MsgDouDiZhuSyncResp()
 		: gameState(0)
@@ -93,6 +94,14 @@ namespace NiuMa
 			scores[i] = 0;
 			winGolds[i] = 0;
 		}
+	}
+
+	MsgDouDiZhuDisbandVote::MsgDouDiZhuDisbandVote()
+		: disbander(-1)
+		, remainTime(300)
+	{
+		choices[0] = 0;
+		choices[1] = 0;
 	}
 
 	void DouDiZhuMessages::registMessages() {

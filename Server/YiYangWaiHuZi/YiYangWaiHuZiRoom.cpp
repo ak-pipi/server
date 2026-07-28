@@ -26,13 +26,16 @@ namespace NiuMa
 		: GameRoom(venueId, static_cast<int>(GameType::YiYangWaiHuZi), 3)
 		, _number(number), _level(level), _gameState(GameState::None), _stateTime(0)
 		, _roundNo(0), _banker(0), _currentPlayer(0), _lastDiscardSeat(-1), _lastDiscardId(-1)
-		, _tileIndex(0), _drawCount(0)
-		, _playerCount(3), _minHuXi(15), _maxScore(300), _tunScoreRate(1)
-		, _allowChi(true), _allowPeng(true), _allowWei(true), _allowPao(true), _allowTi(true)
-		, _zhuangRule(0)
-	{
-		parseRuleConfig(ruleConfig);
-	}
+			, _tileIndex(0), _drawCount(0)
+			, _playerCount(3), _minHuXi(15), _maxScore(300), _tunScoreRate(1)
+			, _roundLimit(0), _roomFee(0)
+			, _allowChi(true), _allowPeng(true), _allowWei(true), _allowPao(true), _allowTi(true)
+			, _zhuangRule(0)
+		{
+			for (int i = 0; i < 3; i++)
+				_totalWinGolds[i] = 0;
+			parseRuleConfig(ruleConfig);
+		}
 
 	YiYangWaiHuZiRoom::~YiYangWaiHuZiRoom() {}
 
@@ -46,9 +49,17 @@ namespace NiuMa
 		delete reader;
 		if (root.isMember("player_count")) _playerCount = root["player_count"].asInt();
 		if (root.isMember("min_huxi")) _minHuXi = root["min_huxi"].asInt();
-		if (root.isMember("max_score")) _maxScore = root["max_score"].asInt();
-		if (root.isMember("tun_score_rate")) _tunScoreRate = root["tun_score_rate"].asInt();
-		if (root.isMember("allow_chi")) _allowChi = root["allow_chi"].asBool();
+			if (root.isMember("max_score")) _maxScore = root["max_score"].asInt();
+			if (root.isMember("tun_score_rate")) _tunScoreRate = root["tun_score_rate"].asInt();
+			if (root.isMember("round_count")) _roundLimit = root["round_count"].asInt();
+			if (root.isMember("round_limit")) _roundLimit = root["round_limit"].asInt();
+			if (root.isMember("room_fee") && root["room_fee"].isInt64())
+				_roomFee = root["room_fee"].asInt64();
+			else if (root.isMember("room_fee") && root["room_fee"].isInt())
+				_roomFee = root["room_fee"].asInt();
+			else if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
+				_roomFee = root["room_fee_type"].asInt();
+			if (root.isMember("allow_chi")) _allowChi = root["allow_chi"].asBool();
 		if (root.isMember("allow_peng")) _allowPeng = root["allow_peng"].asBool();
 		if (root.isMember("allow_wei")) _allowWei = root["allow_wei"].asBool();
 		if (root.isMember("allow_pao")) _allowPao = root["allow_pao"].asBool();
@@ -372,21 +383,41 @@ namespace NiuMa
 		for (int _si = 0; _si < _playerCount; _si++) {
 			auto a = getAvatar(_si);
 			if (!a) continue;
-			if (_si == huSeat) {
-				a->setRoundScore(baseScore * (_playerCount - 1));
-				a->setWinGold(baseScore * (_playerCount - 1) * _level);
+				if (_si == huSeat) {
+					a->setRoundScore(baseScore * (_playerCount - 1));
+					a->setWinGold(baseScore * (_playerCount - 1) * _level);
+				}
+				else {
+					a->setRoundScore(-baseScore);
+					a->setWinGold(-baseScore * _level);
+				}
+				if (_si < 3)
+					_totalWinGolds[_si] += static_cast<int64_t>(a->getWinGold());
 			}
-			else {
-				a->setRoundScore(-baseScore);
-				a->setWinGold(-baseScore * _level);
+
+			notifySettlement(huSeat);
+			saveRoundRecord();
+			_banker = huSeat;
+			if (_roundLimit > 0 && _roundNo >= _roundLimit) {
+				publishFinalRoomFee();
+				gameOver();
+				return;
 			}
+			setState(GameState::Ready);
 		}
 
-		notifySettlement(huSeat);
-		saveRoundRecord();
-		_banker = huSeat;
-		setState(GameState::Ready);
-	}
+		void YiYangWaiHuZiRoom::publishFinalRoomFee() {
+			if (_roundNo <= 0)
+				return;
+			std::vector<std::pair<std::string, int64_t>> netWins;
+			for (int _si = 0; _si < _playerCount && _si < 3; _si++) {
+				auto a = getAvatar(_si);
+				if (!a)
+					continue;
+				netWins.emplace_back(a->getPlayerId(), _totalWinGolds[_si]);
+			}
+			publishRoomFeeOnGameOver(_roomFee, netWins, "YiYangWaiHuZi", "益阳歪胡子整场房费");
+		}
 
 	void YiYangWaiHuZiRoom::saveRoundRecord() {
 		auto task = std::make_shared<YiYangWaiHuZiRecordTask>();

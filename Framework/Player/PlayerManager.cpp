@@ -6,16 +6,52 @@
 #include "Redis/RedisPool.h"
 #include "Timer/TimerManager.h"
 #include "MySql/MysqlPool.h"
+#include "Rabbitmq/RabbitmqConsumer.h"
+#include "Rabbitmq/RabbitmqMessageJsonHandler.h"
+#include "Venue/VenueManager.h"
+#include "Venue/VenueInnerHandler.h"
 #include "PlayerManager.h"
 #include "LoadPlayerTask.h"
+#include "PlayerMessages.h"
 
 #include <mysql/jdbc.h>
 #include <boost/locale.hpp>
+#include "jsoncpp/include/json/json.h"
 
 #include <chrono>
+#include <sstream>
 
 namespace NiuMa {
 	template<> PlayerManager* Singleton<PlayerManager>::_inst = nullptr;
+
+	namespace {
+		std::string getJsonString(const Json::Value& root, const char* key) {
+			const Json::Value& val = root[key];
+			if (val.isString())
+				return val.asString();
+			if (val.isInt64() || val.isInt())
+				return std::to_string(val.asInt64());
+			if (val.isUInt64() || val.isUInt())
+				return std::to_string(val.asUInt64());
+			return std::string();
+		}
+
+		int64_t getJsonInt64(const Json::Value& root, const char* key, int64_t defaultValue = 0) {
+			const Json::Value& val = root[key];
+			if (val.isInt64() || val.isUInt64())
+				return val.asInt64();
+			if (val.isInt())
+				return static_cast<int64_t>(val.asInt());
+			if (val.isString()) {
+				try {
+					return std::stoll(val.asString());
+				} catch (std::exception&) {
+					return defaultValue;
+				}
+			}
+			return defaultValue;
+		}
+	}
 
 	PlayerManager::PlayerManager() {
 		_inexactTime = BaseUtils::getCurrentSecond();
@@ -23,7 +59,7 @@ namespace NiuMa {
 
 	PlayerManager::~PlayerManager() {}
 
-	void PlayerManager::init() {
+	void PlayerManager::init(const std::string& directConsumerTag) {
 		// 添加定时任务
 		_timer = std::make_shared<int>();
 		std::weak_ptr<int> weak(_timer);
@@ -32,6 +68,81 @@ namespace NiuMa {
 			if (!strong)
 				return true;
 			return PlayerManager::getSingleton().onTimer();
+			});
+
+		if (!directConsumerTag.empty()) {
+			class WalletSyncHandler : public RabbitmqMessageJsonHandler {
+			public:
+				WalletSyncHandler(const std::string& tag)
+					: RabbitmqMessageJsonHandler(tag)
+				{}
+
+				virtual ~WalletSyncHandler() {}
+
+			protected:
+				virtual bool receive(const std::string& message) override {
+					return (message.find("MsgPlayerWalletSync") != std::string::npos);
+				}
+
+				virtual void handleImpl(const std::string& msgType, const std::string& json) override {
+					if (msgType == MsgPlayerWalletSync::TYPE)
+						PlayerManager::getSingleton().handleWalletSync(json);
+				}
+			};
+			RabbitmqMessageHandler::Ptr handler(new WalletSyncHandler(directConsumerTag));
+			RabbitmqConsumer::getSingleton().addHandler(handler);
+		}
+	}
+
+	void PlayerManager::handleWalletSync(const std::string& json) {
+		if (json.empty())
+			return;
+		Json::Value root;
+		std::stringstream ss(json);
+		ss >> root;
+
+		std::string playerId = getJsonString(root, "playerId");
+		if (playerId.empty())
+			return;
+		std::string walletType = getJsonString(root, "walletType");
+		int64_t changeAmount = getJsonInt64(root, "changeAmount");
+		int64_t balanceAfter = getJsonInt64(root, "balanceAfter");
+		int64_t gold = getJsonInt64(root, "gold", -1);
+		int64_t deposit = getJsonInt64(root, "deposit", -1);
+		int64_t diamond = getJsonInt64(root, "diamond", -1);
+		std::string bizType = getJsonString(root, "bizType");
+		std::string bizId = getJsonString(root, "bizId");
+		int64_t walletLedgerId = getJsonInt64(root, "walletLedgerId");
+
+		std::string venueId;
+		Player::Ptr player = getPlayer(playerId);
+		if (player)
+			player->getVenueId(venueId);
+		if (venueId.empty()) {
+			std::string redisKey = RedisKeys::PLAYER_CURRENT_VENUE + playerId;
+			RedisPool::getSingleton().get(redisKey, venueId);
+		}
+		if (venueId.empty())
+			return;
+
+		Venue::Ptr venue = VenueManager::getSingleton().getVenue(venueId);
+		if (!venue)
+			return;
+		std::shared_ptr<VenueInnerHandler> handler = venue->getHandler();
+		if (!handler)
+			return;
+		ThreadWorker::Ptr worker = handler->getWorker();
+		if (!worker)
+			return;
+
+		std::weak_ptr<Venue> weakVenue = venue;
+		worker->dispatch([weakVenue, playerId, walletType, changeAmount, balanceAfter,
+			gold, deposit, diamond, bizType, bizId, walletLedgerId]() {
+				Venue::Ptr strong = weakVenue.lock();
+				if (!strong || strong->isObsolete())
+					return;
+				strong->onWalletSync(playerId, walletType, changeAmount, balanceAfter,
+					gold, deposit, diamond, bizType, bizId, walletLedgerId);
 			});
 	}
 

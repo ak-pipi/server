@@ -71,10 +71,10 @@ namespace NiuMa
 		, _qiShouHuSeat(-1)
 		, _qiShouHuType(0)
 		, _qiShouHuScore(0)
-		, _birdMultiple(1)
-		, _diZhu(1)
-		, _maxScore(300)
-		, _roomFeeType(0)
+			, _birdMultiple(1)
+			, _diZhu(1)
+			, _maxScore(300)
+			, _roomFee(0)
 		, _roundCount(8)
 		, _allowChi(true)
 		, _allowPeng(true)
@@ -99,10 +99,11 @@ namespace NiuMa
 	{
 		for (int i = 0; i < 6; i++)
 			_distances[i] = 0.0;
-		for (int i = 0; i < 4; i++) {
-			_kicks[i] = false;
-			_disbandChoices[i] = 0;
-		}
+			for (int i = 0; i < 4; i++) {
+				_kicks[i] = false;
+				_disbandChoices[i] = 0;
+				_totalWinGolds[i] = 0;
+			}
 		parseRuleConfig(ruleConfig);
 		_chi = _allowChi;
 		_dianPao = _allowDianPao;
@@ -131,8 +132,12 @@ namespace NiuMa
 			_diZhu = root["di_zhu"].asInt();
 		if (root.isMember("max_score") && root["max_score"].isInt())
 			_maxScore = root["max_score"].asInt();
-		if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
-			_roomFeeType = root["room_fee_type"].asInt();
+			if (root.isMember("room_fee") && root["room_fee"].isInt64())
+				_roomFee = root["room_fee"].asInt64();
+			else if (root.isMember("room_fee") && root["room_fee"].isInt())
+				_roomFee = root["room_fee"].asInt();
+			else if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
+				_roomFee = root["room_fee_type"].asInt();
 		if (root.isMember("round_count") && root["round_count"].isInt())
 			_roundCount = root["round_count"].asInt();
 		if (root.isMember("allow_chi") && root["allow_chi"].isBool())
@@ -414,10 +419,11 @@ namespace NiuMa
 			avatar = dynamic_cast<ChangShaMahjongAvatar*>(ptr.get());
 			if (avatar == nullptr)
 				continue;
-			delta = floor(avatar->getWinGold() + 0.5);
-			avatar->setWinGold(delta);
-			msg.winGolds[i] = static_cast<int>(delta);
-			cashPledge = avatar->getCashPledge();
+				delta = floor(avatar->getWinGold() + 0.5);
+				avatar->setWinGold(delta);
+				msg.winGolds[i] = static_cast<int>(delta);
+				_totalWinGolds[i] += msg.winGolds[i];
+				cashPledge = avatar->getCashPledge();
 			cashPledge += msg.winGolds[i];
 			test = true;
 			if (msg.winGolds[i] != 0) {
@@ -454,6 +460,10 @@ namespace NiuMa
 				kickAvatar(avatar);
 			else
 				avatar->setReady(false);
+		}
+		if (allRoundsFinished) {
+			publishFinalRoomFee();
+			gameOver();
 		}
 	}
 
@@ -1045,6 +1055,7 @@ namespace NiuMa
 		MsgDisband msg;
 		sendMessageToAll(msg);
 		_roundState = StageState::NotStarted;
+		publishFinalRoomFee();
 		kickAllAvatars();
 		gameOver();
 	}
@@ -1132,5 +1143,18 @@ namespace NiuMa
 					"ChangShaMahjong", getId(), "长沙麻将输掉金币");
 			}
 		}
+	}
+
+	void ChangShaMahjongRoom::publishFinalRoomFee() {
+		if (_roundNo <= 0)
+			return;
+		std::vector<std::pair<std::string, int64_t>> netWins;
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			GameAvatar::Ptr avatar = getAvatar(i);
+			if (!avatar)
+				continue;
+			netWins.emplace_back(avatar->getPlayerId(), _totalWinGolds[i]);
+		}
+		publishRoomFeeOnGameOver(_roomFee, netWins, "ChangShaMahjong", "长沙麻将整场房费");
 	}
 }

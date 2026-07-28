@@ -186,6 +186,17 @@ namespace NiuMa {
 		InfoS << "Player(id: " << playerId << ") disconnect, venueId: " << _id;
 	}
 
+	void Venue::onWalletSync(const std::string& playerId,
+		const std::string& walletType,
+		int64_t changeAmount,
+		int64_t balanceAfter,
+		int64_t gold,
+		int64_t deposit,
+		int64_t diamond,
+		const std::string& bizType,
+		const std::string& bizId,
+		int64_t walletLedgerId) {}
+
 	void Venue::onLeaveVenue(const NetMessage::Ptr& netMsg) {
 		MsgLeaveVenue* inst = dynamic_cast<MsgLeaveVenue*>(netMsg->getMessage().get());
 		if (inst == nullptr)

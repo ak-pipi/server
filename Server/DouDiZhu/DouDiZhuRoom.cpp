@@ -16,10 +16,35 @@
 #include <random>
 #include <sstream>
 
-namespace NiuMa
-{
-	DouDiZhuRoom::DouDiZhuRoom(const std::shared_ptr<DouDiZhuGameRule>& rule,
-		const std::string& venueId,
+	namespace NiuMa
+	{
+		namespace
+		{
+			int64_t readRoomFeeAmount(const std::string& ruleConfig)
+			{
+				if (ruleConfig.empty())
+					return 0;
+				Json::Value root;
+				Json::CharReaderBuilder builder;
+				Json::CharReader* reader = builder.newCharReader();
+				std::string errs;
+				if (!reader->parse(ruleConfig.c_str(), ruleConfig.c_str() + ruleConfig.size(), &root, &errs)) {
+					delete reader;
+					return 0;
+				}
+				delete reader;
+				if (root.isMember("room_fee") && root["room_fee"].isInt64())
+					return root["room_fee"].asInt64();
+				if (root.isMember("room_fee") && root["room_fee"].isInt())
+					return root["room_fee"].asInt();
+				if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
+					return root["room_fee_type"].asInt();
+				return 0;
+			}
+		}
+
+		DouDiZhuRoom::DouDiZhuRoom(const std::shared_ptr<DouDiZhuGameRule>& rule,
+			const std::string& venueId,
 		const std::string& number,
 		int level,
 		const std::string& ruleConfig,
@@ -41,17 +66,24 @@ namespace NiuMa
 		, _callTurn(-1)
 		, _highestBidSeat(-1)
 		, _highestBid(0)
-		, _callCount(0)
-		, _multiplier(1)
-		, _spring(false)
+			, _callCount(0)
+			, _multiplier(1)
+			, _spring(false)
+			, _roomFee(0)
 		, _lastPlaySeat(-1)
 		, _isFirstPlay(true)
 		, _autoActionTime(0)
+		, _dissolveRequested(false)
+		, _dissolveRequester(-1)
+		, _dissolveTick(0)
 	{
-		_playCounts[0] = 0;
-		_playCounts[1] = 0;
-		_rule->loadConfig(ruleConfig);
-	}
+			_playCounts[0] = 0;
+			_playCounts[1] = 0;
+			_dissolveVotes[0] = 0;
+			_dissolveVotes[1] = 0;
+			_rule->loadConfig(ruleConfig);
+			_roomFee = readRoomFeeAmount(ruleConfig);
+		}
 
 	DouDiZhuRoom::~DouDiZhuRoom() {}
 
@@ -72,8 +104,8 @@ namespace NiuMa
 	int DouDiZhuRoom::checkLeave(const std::string& playerId, std::string& errMsg) const {
 		(void)playerId;
 		if (_gameState == GameState::Bidding || _gameState == GameState::Playing) {
-			errMsg = "游戏进行中，无法离开";
-			return 2;
+			errMsg = "游戏进行中，不能直接离开房间";
+			return 1;
 		}
 		return 0;
 	}
@@ -130,6 +162,11 @@ namespace NiuMa
 		_playCounts[0] = 0;
 		_playCounts[1] = 0;
 		_spring = false;
+		_dissolveRequested = false;
+		_dissolveRequester = -1;
+		_dissolveTick = 0;
+		_dissolveVotes[0] = 0;
+		_dissolveVotes[1] = 0;
 		_lastPlaySeat = -1;
 		_isFirstPlay = true;
 		_lastPlayGenre.clear();
@@ -143,6 +180,15 @@ namespace NiuMa
 	}
 
 	void DouDiZhuRoom::onTimer() {
+		if (_dissolveRequested && _dissolveTick > 0) {
+			time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+			if (now - _dissolveTick >= 300) {
+				for (int i = 0; i < 2; i++) {
+					if (_dissolveVotes[i] == 0)
+						doDisbandChoose(i, 1);
+				}
+			}
+		}
 		if (_gameState != GameState::Bidding && _gameState != GameState::Playing)
 			return;
 		time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -168,6 +214,14 @@ namespace NiuMa
 		}
 		if (type == MsgDouDiZhuPlay::TYPE) {
 			onPlay(netMsg);
+			return true;
+		}
+		if (type == MsgDisbandRequest::TYPE) {
+			onDisbandRequest(netMsg);
+			return true;
+		}
+		if (type == MsgDisbandChoose::TYPE) {
+			onDisbandChoose(netMsg);
 			return true;
 		}
 		return GameRoom::onMessage(netMsg);
@@ -444,14 +498,126 @@ namespace NiuMa
 			avatar->setReady(false);
 		}
 		_banker = -1;
-		_landlordSeat = -1;
-		_callStarter = -1;
-		_callTurn = -1;
-		_currentPlayer = -1;
-		setState(GameState::Ready);
-	}
+			_landlordSeat = -1;
+			_callStarter = -1;
+			_callTurn = -1;
+			_currentPlayer = -1;
+			if (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount()) {
+				publishFinalRoomFee();
+				gameOver();
+				return;
+			}
+			setState(GameState::Ready);
+		}
 
-	void DouDiZhuRoom::calculateScores(int winnerSeat) {
+		void DouDiZhuRoom::publishFinalRoomFee() {
+			if (_roundNo <= 0)
+				return;
+			std::vector<std::pair<std::string, int64_t>> netWins;
+			for (int i = 0; i < 2; i++) {
+				std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+				if (!avatar)
+					continue;
+				netWins.emplace_back(avatar->getPlayerId(), avatar->getTotalScore());
+			}
+			publishRoomFeeOnGameOver(_roomFee, netWins, "DouDiZhu", "斗地主整场房费");
+		}
+
+		void DouDiZhuRoom::onDisbandRequest(const NetMessage::Ptr& netMsg) {
+			if (_gameState != GameState::Bidding && _gameState != GameState::Playing)
+				return;
+			if (_dissolveRequested)
+				return;
+			MsgDisbandRequest* inst = dynamic_cast<MsgDisbandRequest*>(netMsg->getMessage().get());
+			if (inst == nullptr)
+				return;
+			std::shared_ptr<DouDiZhuAvatar> avatar = std::dynamic_pointer_cast<DouDiZhuAvatar>(GameRoom::getAvatar(inst->getPlayerId()));
+			if (!avatar)
+				return;
+			_dissolveRequested = true;
+			_dissolveRequester = avatar->getSeat();
+			_dissolveTick = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+			for (int i = 0; i < 2; i++)
+				_dissolveVotes[i] = 0;
+			_dissolveVotes[_dissolveRequester] = 1;
+			notifyDisbandVote(std::string(""));
+		}
+
+		void DouDiZhuRoom::onDisbandChoose(const NetMessage::Ptr& netMsg) {
+			MsgDisbandChoose* inst = dynamic_cast<MsgDisbandChoose*>(netMsg->getMessage().get());
+			if (inst == nullptr)
+				return;
+			if (inst->choice != 1 && inst->choice != 2)
+				return;
+			std::shared_ptr<DouDiZhuAvatar> avatar = std::dynamic_pointer_cast<DouDiZhuAvatar>(GameRoom::getAvatar(inst->getPlayerId()));
+			if (avatar)
+				doDisbandChoose(avatar->getSeat(), inst->choice);
+		}
+
+		void DouDiZhuRoom::doDisbandChoose(int seat, int choice) {
+			if (!_dissolveRequested)
+				return;
+			if (seat < 0 || seat >= 2)
+				return;
+			_dissolveVotes[seat] = choice;
+
+			MsgDisbandChoice msg;
+			msg.seat = seat;
+			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(seat);
+			if (avatar)
+				msg.playerId = avatar->getPlayerId();
+			msg.choice = choice;
+			sendMessageToAll(msg);
+
+			int agree = 0;
+			int reject = 0;
+			for (int i = 0; i < 2; i++) {
+				if (_dissolveVotes[i] == 1)
+					agree++;
+				else if (_dissolveVotes[i] == 2)
+					reject++;
+			}
+			if (agree >= 2)
+				disbandRoom();
+			else if (reject > 0)
+				disbandObsolete();
+		}
+
+		void DouDiZhuRoom::notifyDisbandVote(const std::string& playerId) {
+			MsgDouDiZhuDisbandVote msg;
+			msg.disbander = _dissolveRequester;
+			time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+			msg.remainTime = 300 - static_cast<int>(now - _dissolveTick);
+			if (msg.remainTime < 0)
+				msg.remainTime = 0;
+			for (int i = 0; i < 2; i++)
+				msg.choices[i] = _dissolveVotes[i];
+			if (playerId.empty())
+				sendMessageToAll(msg);
+			else
+				sendMessage(msg, playerId);
+		}
+
+		void DouDiZhuRoom::disbandRoom() {
+			_dissolveRequested = false;
+			MsgDisband msg;
+			sendMessageToAll(msg);
+			publishFinalRoomFee();
+			kickAllAvatars();
+			gameOver();
+		}
+
+		void DouDiZhuRoom::disbandObsolete() {
+			_dissolveRequested = false;
+			_dissolveRequester = -1;
+			_dissolveTick = 0;
+			_dissolveVotes[0] = 0;
+			_dissolveVotes[1] = 0;
+			MsgDisbandObsolete msg;
+			sendMessageToAll(msg);
+		}
+
+		void DouDiZhuRoom::calculateScores(int winnerSeat) {
 		int score = _rule->getBaseScore() * std::max(1, _multiplier);
 		if (_rule->getMaxRoundScore() > 0)
 			score = std::min(score, _rule->getMaxRoundScore());

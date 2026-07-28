@@ -11,6 +11,7 @@
 #include "Message/MsgBase.h"
 
 #include <vector>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -227,10 +228,30 @@ namespace NiuMa {
 		 */
 		void incDrawNum(const std::string& playerId);
 
+		/**
+		 * 按整场最终输赢分摊房费并发布房费扣除事件。
+		 * 净赢分超过winThreshold的玩家承担房费；无人超过时全体真实玩家均摊。
+		 */
+		void publishRoomFeeOnGameOver(int64_t roomFee,
+			const std::vector<std::pair<std::string, int64_t>>& netWins,
+			const std::string& bizType,
+			const std::string& remark,
+			int64_t winThreshold = 10);
+
 	public:
 		virtual bool onMessage(const NetMessage::Ptr& netMsg) override;
 		virtual void onConnect(const std::string& playerId) override;
 		virtual void onDisconnect(const std::string& playerId) override;
+		virtual void onWalletSync(const std::string& playerId,
+			const std::string& walletType,
+			int64_t changeAmount,
+			int64_t balanceAfter,
+			int64_t gold,
+			int64_t deposit,
+			int64_t diamond,
+			const std::string& bizType,
+			const std::string& bizId,
+			int64_t walletLedgerId) override;
 
 	protected:
 		// 包括观众，即当playerId为观众时也返回true
@@ -518,6 +539,9 @@ namespace NiuMa {
 
 		// 加入游戏需要钻石数量
 		int64_t _diamondNeed;
+
+		// 整场房费是否已经发布，避免正常结束/解散/离场路径重复扣费
+		bool _roomFeeSettled;
 
 		// 座位上的玩家
 		GameAvatar::Ptr _avatarSeats[MAX_SEAT_NUMS];

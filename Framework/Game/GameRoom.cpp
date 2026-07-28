@@ -11,6 +11,8 @@
 #include "GetCashPledgeTask.h"
 #include "GameMessages.h"
 #include "GetAgencyTask.h"
+#include "Player/PlayerMessages.h"
+#include "WalletEventTask.h"
 
 #include <boost/locale.hpp>
 #include <sstream>
@@ -24,6 +26,7 @@ namespace NiuMa
 		, _maxPlayerNums(maxPlayerNums)
 		, _cashPledge(0)
 		, _diamondNeed(0)
+		, _roomFeeSettled(false)
 	{}
 
 	GameRoom::~GameRoom() {}
@@ -149,6 +152,37 @@ namespace NiuMa
 		msg.seat = avatar->getSeat();
 		msg.offline = true;
 		sendMessageToAll(msg, playerId, true);
+	}
+
+	void GameRoom::onWalletSync(const std::string& playerId,
+		const std::string& walletType,
+		int64_t changeAmount,
+		int64_t balanceAfter,
+		int64_t gold,
+		int64_t deposit,
+		int64_t diamond,
+		const std::string& bizType,
+		const std::string& bizId,
+		int64_t walletLedgerId) {
+		GameAvatar::Ptr avatar = getAvatar(playerId);
+		if (avatar && (walletType.empty() || walletType == "gold") && gold >= 0)
+			avatar->setGold(gold);
+
+		Player::Ptr player = PlayerManager::getSingleton().getPlayer(playerId);
+		if (!player)
+			return;
+		MsgPlayerWalletSync msg;
+		msg.playerId = playerId;
+		msg.walletType = walletType;
+		msg.changeAmount = changeAmount;
+		msg.balanceAfter = balanceAfter;
+		msg.gold = gold;
+		msg.deposit = deposit;
+		msg.diamond = diamond;
+		msg.bizType = bizType;
+		msg.bizId = bizId;
+		msg.walletLedgerId = walletLedgerId;
+		msg.send(player->getSession());
 	}
 
 	int GameRoom::getEmptySeat() const {
@@ -1311,5 +1345,51 @@ namespace NiuMa
 		MysqlQueryTask::Ptr task = incDrawNumTask(playerId, getGameType());
 		if (task)
 			MysqlPool::getSingleton().asyncQuery(task);
+	}
+
+	void GameRoom::publishRoomFeeOnGameOver(int64_t roomFee,
+		const std::vector<std::pair<std::string, int64_t>>& netWins,
+		const std::string& bizType,
+		const std::string& remark,
+		int64_t winThreshold) {
+		if (_roomFeeSettled || roomFee <= 0)
+			return;
+
+		std::vector<std::pair<std::string, int64_t>> players;
+		std::vector<std::pair<std::string, int64_t>> winners;
+		for (const auto& item : netWins) {
+			const std::string& playerId = item.first;
+			if (playerId.empty())
+				continue;
+			GameAvatar::Ptr avatar = getAvatar(playerId);
+			if (!avatar || avatar->isRobot())
+				continue;
+			players.push_back(item);
+			if (item.second > winThreshold)
+				winners.push_back(item);
+		}
+
+		const std::vector<std::pair<std::string, int64_t>>& payers = winners.empty() ? players : winners;
+		if (payers.empty())
+			return;
+
+		_roomFeeSettled = true;
+		const int64_t baseAmount = roomFee / static_cast<int64_t>(payers.size());
+		int64_t remainder = roomFee % static_cast<int64_t>(payers.size());
+		for (const auto& item : payers) {
+			int64_t amount = baseAmount;
+			if (remainder > 0) {
+				amount++;
+				remainder--;
+			}
+			if (amount <= 0)
+				continue;
+			InfoS << "发布整场房费扣除事件，场地Id: " << getId()
+				<< ", 玩家Id: " << item.first
+				<< ", 房费: " << amount
+				<< ", 整场净赢: " << item.second
+				<< ", 总房费: " << roomFee;
+			WalletEventTask::publish(item.first, "ROOM_FEE", amount, bizType, getId(), remark);
+		}
 	}
 }

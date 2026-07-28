@@ -70,9 +70,10 @@ namespace NiuMa
 		int calcTotalHuXi(int seat) const;
 		int calcPenaltyHuXi() const;
 
-		// 结算
-		void settle(int huSeat);
-		void saveRoundRecord();
+			// 结算
+			void settle(int huSeat);
+			void saveRoundRecord();
+			void publishFinalRoomFee();
 
 		// 消息发送
 		void notifyDeal(const std::string& playerId);
@@ -100,9 +101,11 @@ namespace NiuMa
 		// 规则配置
 		int _playerCount;
 		int _minHuXi;
-		int _maxScore;
-		int _tunScoreRate;
-		bool _allowChi;
+			int _maxScore;
+			int _tunScoreRate;
+			int _roundLimit;
+			int64_t _roomFee;
+			bool _allowChi;
 		bool _allowPeng;
 		bool _allowWei;
 		bool _allowPao;
@@ -112,8 +115,10 @@ namespace NiuMa
 		// 回放
 		WaiHuZiPlaybackData _playbackData;
 
-		// 风控数据采集
-		RiskControlCollector _riskCollector;
-	};
+			// 风控数据采集
+			RiskControlCollector _riskCollector;
+
+			int64_t _totalWinGolds[3];
+		};
 }
 #endif

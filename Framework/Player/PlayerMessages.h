@@ -9,6 +9,8 @@
 #include "Message/MsgBase.h"
 #include "Message/MsgWrapper.h"
 
+#include <cstdint>
+
 namespace NiuMa
 {
 	class PlayerMessages
@@ -157,6 +159,39 @@ namespace NiuMa
 		int forceUpdate = 0;
 
 		MSGPACK_DEFINE_MAP(placeholder, engineVersion, minVersion, playerVersion, forceUpdate);
+	};
+
+	/**
+	 * 玩家钱包同步消息，由 web_server 通过游戏服转发给当前在线玩家。
+	 */
+	class MsgPlayerWalletSync : public MsgBase
+	{
+	public:
+		MsgPlayerWalletSync() {}
+		virtual ~MsgPlayerWalletSync() {}
+
+		static const std::string TYPE;
+
+	public:
+		virtual const std::string& getType() const override {
+			return TYPE;
+		}
+
+		MSG_PACK_IMPL
+
+	public:
+		std::string playerId;
+		std::string walletType;
+		int64_t changeAmount = 0;
+		int64_t balanceAfter = 0;
+		int64_t gold = -1;
+		int64_t deposit = -1;
+		int64_t diamond = -1;
+		std::string bizType;
+		std::string bizId;
+		int64_t walletLedgerId = 0;
+
+		MSGPACK_DEFINE_MAP(playerId, walletType, changeAmount, balanceAfter, gold, deposit, diamond, bizType, bizId, walletLedgerId);
 	};
 }
 

@@ -29,12 +29,34 @@ namespace NiuMa
 {
 	namespace
 	{
-		bool isPaoDeKuaiBombGenre(int genre)
-		{
-			return genre == static_cast<int>(PaoDeKuaiGenre::Bomb) ||
-				genre == static_cast<int>(PaoDeKuaiGenre::Rocket);
+			bool isPaoDeKuaiBombGenre(int genre)
+			{
+				return genre == static_cast<int>(PaoDeKuaiGenre::Bomb) ||
+					genre == static_cast<int>(PaoDeKuaiGenre::Rocket);
+			}
+
+			int64_t readRoomFeeAmount(const std::string& ruleConfig)
+			{
+				if (ruleConfig.empty())
+					return 0;
+				Json::Value root;
+				Json::CharReaderBuilder builder;
+				Json::CharReader* reader = builder.newCharReader();
+				std::string errs;
+				if (!reader->parse(ruleConfig.c_str(), ruleConfig.c_str() + ruleConfig.size(), &root, &errs)) {
+					delete reader;
+					return 0;
+				}
+				delete reader;
+				if (root.isMember("room_fee") && root["room_fee"].isInt64())
+					return root["room_fee"].asInt64();
+				if (root.isMember("room_fee") && root["room_fee"].isInt())
+					return root["room_fee"].asInt();
+				if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
+					return root["room_fee_type"].asInt();
+				return 0;
+			}
 		}
-	}
 
 	PaoDeKuaiRoom::PaoDeKuaiRoom(const std::shared_ptr<PaoDeKuaiRule>& rule,
 		const std::string& venueId,
@@ -57,19 +79,23 @@ namespace NiuMa
 		, _lastPlaySeat(-1)
 		, _isFirstPlay(true)
 		, _hasFirstPlayed(false)
-		, _bombCount(0)
-		, _multiplier(1)
-		, _spring(false)
-		, _autoPlayTime(0)
-		, _dissolveRequested(false)
+			, _bombCount(0)
+			, _multiplier(1)
+			, _spring(false)
+			, _roomFee(0)
+			, _autoPlayTime(0)
+			, _dissolveRequested(false)
+			, _dissolveRequester(-1)
+			, _dissolveTick(0)
 	{
 		_dissolveVotes[0] = 0;
 		_dissolveVotes[1] = 0;
 
-		// 加载规则配置
-		_rule->loadConfig(ruleConfig);
-		setCashPledge(_rule->getBaseScore() * 8);
-	}
+			// 加载规则配置
+			_rule->loadConfig(ruleConfig);
+			_roomFee = readRoomFeeAmount(ruleConfig);
+			setCashPledge(_rule->getBaseScore() * 8);
+		}
 
 	PaoDeKuaiRoom::~PaoDeKuaiRoom() {}
 
@@ -90,8 +116,8 @@ namespace NiuMa
 	int PaoDeKuaiRoom::checkLeave(const std::string& playerId, std::string& errMsg) const {
 		(void)playerId;
 		if (_gameState == GameState::Playing) {
-			errMsg = "游戏进行中，无法离开";
-			return 2; // 不能离开
+			errMsg = "游戏进行中，不能直接离开房间";
+			return 1;
 		}
 		return 0;
 	}
@@ -144,6 +170,8 @@ namespace NiuMa
 		_multiplier = 1;
 		_spring = false;
 		_dissolveRequested = false;
+		_dissolveRequester = -1;
+		_dissolveTick = 0;
 		_dissolveVotes[0] = 0;
 		_dissolveVotes[1] = 0;
 		_playback = PaoDeKuaiPlaybackData();
@@ -157,6 +185,12 @@ namespace NiuMa
 
 	void PaoDeKuaiRoom::onTimer() {
 		time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		if (_dissolveRequested && _dissolveTick > 0 && now - _dissolveTick >= 300) {
+			for (int _si = 0; _si < 2; _si++) {
+				if (_dissolveVotes[_si] == 0)
+					doDisbandChoose(_si, 1);
+			}
+		}
 		if (_gameState == GameState::Playing) {
 			// 检查托管超时
 			if (_autoPlayTime > 0 && now >= _autoPlayTime) {
@@ -167,6 +201,8 @@ namespace NiuMa
 	}
 
 	bool PaoDeKuaiRoom::onMessage(const NetMessage::Ptr& netMsg) {
+		if (GameRoom::onMessage(netMsg))
+			return true;
 		const std::string& type = netMsg->getType();
 		if (type == MsgPaoDeKuaiSync::TYPE) {
 			onSyncTable(netMsg);
@@ -178,6 +214,14 @@ namespace NiuMa
 		}
 		else if (type == MsgPaoDeKuaiPlay::TYPE) {
 			onPlay(netMsg);
+			return true;
+		}
+		else if (type == MsgDisbandRequest::TYPE) {
+			onDisbandRequest(netMsg);
+			return true;
+		}
+		else if (type == MsgDisbandChoose::TYPE) {
+			onDisbandChoose(netMsg);
 			return true;
 		}
 		return false;
@@ -574,10 +618,29 @@ namespace NiuMa
 		// 更新庄家（赢家做庄）
 		_banker = winnerSeat;
 
+		if (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount()) {
+			publishFinalRoomFee();
+			gameOver();
+			return;
+		}
+
 		setState(GameState::Ready);
 	}
 
-	void PaoDeKuaiRoom::calculateScores(int winnerSeat) {
+	void PaoDeKuaiRoom::publishFinalRoomFee() {
+		if (_roundNo <= 0)
+			return;
+		std::vector<std::pair<std::string, int64_t>> netWins;
+		for (int _si = 0; _si < 2; _si++) {
+			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+			if (!avatar)
+				continue;
+			netWins.emplace_back(avatar->getPlayerId(), avatar->getTotalScore());
+		}
+		publishRoomFeeOnGameOver(_roomFee, netWins, "PaoDeKuai", "跑得快整场房费");
+	}
+
+		void PaoDeKuaiRoom::calculateScores(int winnerSeat) {
 		int baseScore = _rule->getBaseScore();
 		int multiplier = _multiplier;
 		int loserSeat = getNextSeat(winnerSeat);
@@ -891,9 +954,98 @@ namespace NiuMa
 		}
 	}
 
-	void PaoDeKuaiRoom::onDissolveVote(const NetMessage::Ptr& netMsg) {
-		(void)netMsg;
-		// 简化的解散投票处理
+	void PaoDeKuaiRoom::onDisbandRequest(const NetMessage::Ptr& netMsg) {
+		if (_gameState != GameState::Playing)
+			return;
+		if (_dissolveRequested)
+			return;
+		MsgDisbandRequest* inst = dynamic_cast<MsgDisbandRequest*>(netMsg->getMessage().get());
+		if (inst == nullptr)
+			return;
+		auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(inst->getPlayerId()));
+		if (!avatar)
+			return;
+		_dissolveRequested = true;
+		_dissolveRequester = avatar->getSeat();
+		_dissolveTick = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		for (int _si = 0; _si < 2; _si++)
+			_dissolveVotes[_si] = 0;
+		_dissolveVotes[_dissolveRequester] = 1;
+		notifyDisbandVote(std::string(""));
+	}
+
+	void PaoDeKuaiRoom::onDisbandChoose(const NetMessage::Ptr& netMsg) {
+		MsgDisbandChoose* inst = dynamic_cast<MsgDisbandChoose*>(netMsg->getMessage().get());
+		if (inst == nullptr)
+			return;
+		if (inst->choice != 1 && inst->choice != 2)
+			return;
+		auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(inst->getPlayerId()));
+		if (avatar)
+			doDisbandChoose(avatar->getSeat(), inst->choice);
+	}
+
+	void PaoDeKuaiRoom::doDisbandChoose(int seat, int choice) {
+		if (!_dissolveRequested)
+			return;
+		if (seat < 0 || seat >= 2)
+			return;
+		_dissolveVotes[seat] = choice;
+
+		MsgDisbandChoice msg;
+		msg.seat = seat;
+		auto avatar = getAvatar(seat);
+		if (avatar)
+			msg.playerId = avatar->getPlayerId();
+		msg.choice = choice;
+		sendMessageToAll(msg);
+
+		int agree = 0;
+		int reject = 0;
+		for (int _si = 0; _si < 2; _si++) {
+			if (_dissolveVotes[_si] == 1)
+				agree++;
+			else if (_dissolveVotes[_si] == 2)
+				reject++;
+		}
+		if (agree >= 2)
+			disbandRoom();
+		else if (reject > 0)
+			disbandObsolete();
+	}
+
+	void PaoDeKuaiRoom::notifyDisbandVote(const std::string& playerId) {
+		MsgPaoDeKuaiDisbandVote msg;
+		msg.disbander = _dissolveRequester;
+		time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		msg.remainTime = 300 - static_cast<int>(now - _dissolveTick);
+		if (msg.remainTime < 0)
+			msg.remainTime = 0;
+		for (int _si = 0; _si < 2; _si++)
+			msg.choices[_si] = _dissolveVotes[_si];
+		if (playerId.empty())
+			sendMessageToAll(msg);
+		else
+			sendMessage(msg, playerId);
+	}
+
+	void PaoDeKuaiRoom::disbandRoom() {
+		_dissolveRequested = false;
+		MsgDisband msg;
+		sendMessageToAll(msg);
+		publishFinalRoomFee();
+		kickAllAvatars();
+		gameOver();
+	}
+
+	void PaoDeKuaiRoom::disbandObsolete() {
+		_dissolveRequested = false;
+		_dissolveRequester = -1;
+		_dissolveTick = 0;
+		for (int _si = 0; _si < 2; _si++)
+			_dissolveVotes[_si] = 0;
+		MsgDisbandObsolete msg;
+		sendMessageToAll(msg);
 	}
 
 	// 消息发送

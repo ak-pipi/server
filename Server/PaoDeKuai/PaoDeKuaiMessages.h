@@ -310,6 +310,35 @@ namespace NiuMa
 		MSGPACK_DEFINE_MAP(winnerSeat, scores, winGolds, remainCards,
 			roundNo, roundCount, baseScore, bombCount, multiplier, spring);
 	};
+
+	/**
+	 * 通知解散投票消息
+	 */
+	class MsgPaoDeKuaiDisbandVote : public MsgBase {
+	public:
+		MsgPaoDeKuaiDisbandVote();
+		virtual ~MsgPaoDeKuaiDisbandVote() {}
+
+		static const std::string TYPE;
+
+		virtual const std::string& getType() const {
+			return TYPE;
+		}
+
+		MSG_PACK_IMPL
+
+	public:
+		// 发起者座位号
+		int disbander;
+
+		// 剩余秒数
+		int remainTime;
+
+		// 各座位选择，0-未选择、1-同意、2-反对
+		int choices[2];
+
+		MSGPACK_DEFINE_MAP(disbander, remainTime, choices);
+	};
 }
 
 #endif // _NIU_MA_PAODEKUAI_MESSAGES_H_

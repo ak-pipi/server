@@ -207,6 +207,21 @@ namespace NiuMa
 
 		MSGPACK_DEFINE_MAP(winnerSeat, landlordSeat, scores, winGolds, remainCards, multiplier, spring);
 	};
+
+	class MsgDouDiZhuDisbandVote : public MsgBase {
+	public:
+		MsgDouDiZhuDisbandVote();
+		static const std::string TYPE;
+		virtual const std::string& getType() const { return TYPE; }
+		MSG_PACK_IMPL
+
+	public:
+		int disbander;
+		int remainTime;
+		int choices[2];
+
+		MSGPACK_DEFINE_MAP(disbander, remainTime, choices);
+	};
 }
 
 #endif

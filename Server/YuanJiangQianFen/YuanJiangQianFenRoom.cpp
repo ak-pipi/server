@@ -25,10 +25,10 @@ namespace NiuMa
 		, _roundNo(0), _bankerSeat(0), _currentPlayer(0)
 		, _callScoreCurrent(0), _highestCallScore(0), _highestCallSeat(-1), _callScoreCount(0)
 		, _lastPlaySeat(-1), _isFirstPlay(true), _roundCount(0)
-		, _rule(std::make_shared<PaoDeKuaiRule>())
-		, _dealer(_rule)
-		, _playerCount(4), _targetScore(1000), _callScoreEnabled(true), _bankerRule(0)
-		, _deckCount(2), _bombEnabled(false), _roundLimit(0), _maxScore(500)
+			, _rule(std::make_shared<PaoDeKuaiRule>())
+			, _dealer(_rule)
+			, _playerCount(4), _targetScore(1000), _callScoreEnabled(true), _bankerRule(0)
+			, _deckCount(2), _bombEnabled(false), _roundLimit(0), _maxScore(500), _roomFee(0)
 	{
 		_rule->initialise();
 		for (int i = 0; i < 4; i++) { _totalScores[i] = 0; _roundScores[i] = 0; }
@@ -51,11 +51,17 @@ namespace NiuMa
 		if (root.isMember("banker_rule")) _bankerRule = root["banker_rule"].asInt();
 		if (root.isMember("deck_count")) _deckCount = root["deck_count"].asInt();
 		if (root.isMember("bomb_enabled")) _bombEnabled = root["bomb_enabled"].asBool();
-		if (root.isMember("round_limit")) _roundLimit = root["round_limit"].asInt();
-		if (root.isMember("max_score")) _maxScore = root["max_score"].asInt();
-		if (root.isMember("score_cards") && root["score_cards"].isObject()) {
-			for (const auto& key : root["score_cards"].getMemberNames())
-				_scoreCardMap[std::atoi(key.c_str())] = root["score_cards"][key].asInt();
+			if (root.isMember("round_limit")) _roundLimit = root["round_limit"].asInt();
+			if (root.isMember("max_score")) _maxScore = root["max_score"].asInt();
+			if (root.isMember("room_fee") && root["room_fee"].isInt64())
+				_roomFee = root["room_fee"].asInt64();
+			else if (root.isMember("room_fee") && root["room_fee"].isInt())
+				_roomFee = root["room_fee"].asInt();
+			else if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
+				_roomFee = root["room_fee_type"].asInt();
+			if (root.isMember("score_cards") && root["score_cards"].isObject()) {
+				for (const auto& key : root["score_cards"].getMemberNames())
+					_scoreCardMap[std::atoi(key.c_str())] = root["score_cards"][key].asInt();
 		}
 		// 默认计分牌配置
 		if (_scoreCardMap.empty()) {
@@ -276,6 +282,8 @@ namespace NiuMa
 
 		if (gameEnd) {
 			notifyFinalResult();
+			publishFinalRoomFee();
+			gameOver();
 			_gameState = GameState::None;
 		}
 		else {
@@ -437,12 +445,25 @@ namespace NiuMa
 		}
 		sendMessageToAll(*msg);
 		// MQ
-		for (int _si = 0; _si < 4; _si++) {
-			auto _av = GameRoom::getAvatar(_si);
-			if (!_av) continue;
-			int64_t g = _totalScores[_si] * _level;
-			if (g > 0) WalletEventTask::publish(_av->getPlayerId(), "GAME_WIN", g, "YuanJiangQianFen", getId(), "沅江千分赢得金币");
-			else if (g < 0) WalletEventTask::publish(_av->getPlayerId(), "GAME_LOSE", -g, "YuanJiangQianFen", getId(), "沅江千分输掉金币");
+			for (int _si = 0; _si < 4; _si++) {
+				auto _av = GameRoom::getAvatar(_si);
+				if (!_av) continue;
+				int64_t g = _totalScores[_si] * _level;
+				if (g > 0) WalletEventTask::publish(_av->getPlayerId(), "GAME_WIN", g, "YuanJiangQianFen", getId(), "沅江千分赢得金币");
+				else if (g < 0) WalletEventTask::publish(_av->getPlayerId(), "GAME_LOSE", -g, "YuanJiangQianFen", getId(), "沅江千分输掉金币");
+			}
+		}
+
+		void YuanJiangQianFenRoom::publishFinalRoomFee() {
+			if (_roundCount <= 0)
+				return;
+			std::vector<std::pair<std::string, int64_t>> netWins;
+			for (int _si = 0; _si < 4; _si++) {
+				auto _av = GameRoom::getAvatar(_si);
+				if (!_av)
+					continue;
+				netWins.emplace_back(_av->getPlayerId(), static_cast<int64_t>(_totalScores[_si]) * _level);
+			}
+			publishRoomFeeOnGameOver(_roomFee, netWins, "YuanJiangQianFen", "沅江千分整场房费");
 		}
 	}
-}

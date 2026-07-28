@@ -29,7 +29,7 @@ namespace NiuMa
 
 		public:
 			virtual QueryType buildQuery(std::string& sql) override {
-				sql = "select `number`, `level` from `game_guan_dan` where `venue_id` = \"" + _venueId + "\"";
+				sql = "select `number`, `level`, `rule_config` from `game_guan_dan` where `venue_id` = \"" + _venueId + "\"";
 				return QueryType::Select;
 			}
 
@@ -38,6 +38,7 @@ namespace NiuMa
 				while (res->next()) {
 					_number = res->getString("number");
 					_level = res->getInt("level");
+					_ruleConfig = res->getString("rule_config");
 					rows++;
 				}
 				return rows;
@@ -51,6 +52,8 @@ namespace NiuMa
 
 			//
 			int _level;
+
+			std::string _ruleConfig;
 		};
 		std::shared_ptr<LackeyTask> task = std::make_shared<LackeyTask>(id);
 		MysqlPool::getSingleton().syncQuery(task);
@@ -58,7 +61,7 @@ namespace NiuMa
 			ErrorS << "加载掼蛋游戏(Id: " << id << ")失败";
 			return nullptr;
 		}
-		std::shared_ptr<GuanDanRoom> room = std::make_shared<GuanDanRoom>(id, task->_number, task->_level);
+		std::shared_ptr<GuanDanRoom> room = std::make_shared<GuanDanRoom>(id, task->_number, task->_level, task->_ruleConfig);
 		return room;
 	}
 }

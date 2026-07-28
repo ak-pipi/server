@@ -2,9 +2,14 @@
 
 #include "WalletEventTask.h"
 #include "Base/Log.h"
+#include "Base/BaseUtils.h"
+
+#include <atomic>
 
 namespace NiuMa
 {
+	static std::atomic<unsigned long long> walletEventSeq(0);
+
 	void WalletEventTask::publish(const std::string& playerId,
 		const std::string& eventType,
 		int64_t amount,
@@ -15,12 +20,16 @@ namespace NiuMa
 		const std::string& routingKey)
 	{
 		Json::Value json(Json::objectValue);
+		unsigned long long seq = ++walletEventSeq;
+		std::string refNo = "cpp:" + eventType + ":" + bizType + ":" + bizId + ":" + playerId + ":"
+			+ std::to_string(BaseUtils::getCurrentMillisecond()) + ":" + std::to_string(seq);
 		json["user_id"] = playerId;
 		json["wallet_type"] = "gold";
 		json["change_amount"] = static_cast<Json::Int64>(amount);
 		json["event_type"] = eventType;
 		json["biz_type"] = bizType;
 		json["biz_id"] = bizId;
+		json["ref_no"] = refNo;
 		json["remark"] = remark;
 
 		std::string body = json.toStyledString();

@@ -53,9 +53,10 @@ namespace NiuMa
 		void startRound();
 		void notifyDisbandVote(const std::string& playerId);
 		void doDisbandChoose(int seat, int choice);
-		void disbandRoom();
-		void disbandObsolete();
-		void saveRoundRecord();
+			void disbandRoom();
+			void disbandObsolete();
+			void saveRoundRecord();
+			void publishFinalRoomFee();
 
 		// 起手胡检测
 		void checkQiShouHu();
@@ -111,11 +112,11 @@ namespace NiuMa
 		std::vector<int> _birdHitSeats;
 		int _birdMultiple;
 
-		// 玩法配置
-		int _diZhu;
-		int _maxScore;
-		int _roomFeeType;
-		int _roundCount;
+			// 玩法配置
+			int _diZhu;
+			int _maxScore;
+			int64_t _roomFee;
+			int _roundCount;
 		bool _allowChi;
 		bool _allowPeng;
 		bool _allowGang;
@@ -133,13 +134,15 @@ namespace NiuMa
 		bool _liuLiuShunEnabled;
 		bool _jieJieGaoEnabled;
 		bool _sanTongEnabled;
-		bool _yiZhiHuaEnabled;
+			bool _yiZhiHuaEnabled;
 
-		// 中鸟开关
-		bool _zhongNiaoEnabled;
-		int _birdCount;
-		bool _birdDouble;
-		bool _birdCapMax;
+			// 中鸟开关
+			bool _zhongNiaoEnabled;
+			int _birdCount;
+			bool _birdDouble;
+			bool _birdCapMax;
+
+			int64_t _totalWinGolds[4];
 
 		// 回放数据
 		ChangShaMahjongPlaybackData _playbackData;

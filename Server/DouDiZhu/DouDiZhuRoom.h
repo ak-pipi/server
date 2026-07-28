@@ -79,9 +79,16 @@ namespace NiuMa
 		void settle(int winnerSeat);
 		void calculateScores(int winnerSeat);
 		void autoAction();
-		std::string playErrorText(PlayResult result) const;
-		void updateDistrictNotFull();
-		void recordDistrictPlayerTrack(const std::string& playerId);
+			std::string playErrorText(PlayResult result) const;
+			void updateDistrictNotFull();
+			void recordDistrictPlayerTrack(const std::string& playerId);
+			void publishFinalRoomFee();
+			void onDisbandRequest(const NetMessage::Ptr& netMsg);
+			void onDisbandChoose(const NetMessage::Ptr& netMsg);
+			void doDisbandChoose(int seat, int choice);
+			void notifyDisbandVote(const std::string& playerId);
+			void disbandRoom();
+			void disbandObsolete();
 
 	private:
 		void onSyncTable(const NetMessage::Ptr& netMsg);
@@ -113,13 +120,18 @@ namespace NiuMa
 		int _highestBidSeat;
 		int _highestBid;
 		int _callCount;
-		int _multiplier;
-		int _playCounts[2];
-		bool _spring;
-		int _lastPlaySeat;
+			int _multiplier;
+			int _playCounts[2];
+			bool _spring;
+			int64_t _roomFee;
+			int _lastPlaySeat;
 		PokerGenre _lastPlayGenre;
 		bool _isFirstPlay;
 		time_t _autoActionTime;
+		bool _dissolveRequested;
+		int _dissolveRequester;
+		time_t _dissolveTick;
+		int _dissolveVotes[2];
 		CardArray _bottomCards;
 		CardArray _discardedCards;
 	};

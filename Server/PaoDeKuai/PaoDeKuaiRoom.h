@@ -101,10 +101,12 @@ namespace NiuMa
 		// 当前结算倍数
 		int _multiplier;
 
-		// 本局是否关门/春天
-		bool _spring;
+			// 本局是否关门/春天
+			bool _spring;
 
-		// 托管超时计时器
+			int64_t _roomFee;
+
+			// 托管超时计时器
 		time_t _autoPlayTime;
 
 		// 回放数据
@@ -118,6 +120,12 @@ namespace NiuMa
 
 		// 是否有人发起解散
 		bool _dissolveRequested;
+
+		// 解散发起者
+		int _dissolveRequester;
+
+		// 解散发起时间
+		time_t _dissolveTick;
 
 	protected:
 		virtual GameAvatar::Ptr createAvatar(const std::string& playerId, int seat, bool robot) const override;
@@ -187,14 +195,22 @@ namespace NiuMa
 		// 更新区域匹配房间未满列表
 		void updateDistrictNotFull();
 
-		// 记录区域玩家离场轨迹
-		void recordDistrictPlayerTrack(const std::string& playerId);
+			// 记录区域玩家离场轨迹
+			void recordDistrictPlayerTrack(const std::string& playerId);
 
-		// 消息处理
+			void publishFinalRoomFee();
+
+			void onDisbandRequest(const NetMessage::Ptr& netMsg);
+			void onDisbandChoose(const NetMessage::Ptr& netMsg);
+			void doDisbandChoose(int seat, int choice);
+			void notifyDisbandVote(const std::string& playerId);
+			void disbandRoom();
+			void disbandObsolete();
+
+			// 消息处理
 		void onSyncTable(const NetMessage::Ptr& netMsg);
 		void onReady(const NetMessage::Ptr& netMsg);
 		void onPlay(const NetMessage::Ptr& netMsg);
-		void onDissolveVote(const NetMessage::Ptr& netMsg);
 
 		// 消息发送
 		void notifyDeal(const std::string& playerId);

@@ -333,7 +333,7 @@ int main(int argc, char* argv[]) {
         NiuMa::SecurityManager::getSingleton().init(fanoutExchange, fanoutConsumerTag);
 
         // 初始化玩家管理器
-        NiuMa::PlayerManager::getSingleton().init();
+        NiuMa::PlayerManager::getSingleton().init(directConsumerTag);
 
         // 初始化版本管理器
         NiuMa::VersionManager::getSingleton().init(directExchange, directConsumerTag);

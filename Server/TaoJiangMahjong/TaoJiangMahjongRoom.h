@@ -245,6 +245,8 @@ namespace NiuMa
 		 */
 		void saveRoundRecord();
 
+		void publishFinalRoomFee();
+
 		/**
 		 * 获取区域ID
 		 * @return 区域ID，0表示好友房
@@ -325,9 +327,9 @@ namespace NiuMa
 		int _maxScore;
 
 		/**
-		 * 房费类型，0-房主付费，1-AA付费
+		 * 整场总房费金额
 		 */
-		int _roomFeeType;
+		int64_t _roomFee;
 
 		/**
 		 * 总局数
@@ -378,6 +380,11 @@ namespace NiuMa
 		 * 是否允许投票解散
 		 */
 		bool _dissolveVote;
+
+		/**
+		 * 整场累计净输赢，用于房费承担判断
+		 */
+		int64_t _totalWinGolds[4];
 
 		// ---- 赖子系统 ----
 

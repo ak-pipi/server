@@ -26,7 +26,12 @@ namespace NiuMa {
 		/**
 		 * 初始化
 		 */
-		void init();
+		void init(const std::string& directConsumerTag = std::string());
+
+		/**
+		 * 处理 web_server 发来的玩家钱包同步消息
+		 */
+		void handleWalletSync(const std::string& json);
 
 		/**
 		 * 获取玩家，即引用玩家

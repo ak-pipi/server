@@ -16,6 +16,13 @@ PUBLIC_HOST="${PUBLIC_HOST:-}"
 TCP_PORT="${TCP_PORT:-10086}"
 WS_PORT="${WS_PORT:-9098}"
 BUILD_JOBS="${BUILD_JOBS:-2}"
+DB_HOST="${DB_HOST:-127.0.0.1}"
+DB_PORT="${DB_PORT:-3306}"
+DB_USER="${DB_USER:-root}"
+DB_PASSWORD="${DB_PASSWORD:-}"
+DB_NAME="${DB_NAME:-niuma}"
+SQL_FILES=()
+APPLY_NIUMA_SQL=false
 SYNC_CONFIG=false
 SKIP_FIREWALL=false
 UPDATE_ENDPOINTS=false
@@ -45,10 +52,18 @@ usage() {
   --build-jobs N       Docker 构建并行数（默认 2，适合小规格 ECS）
   --sync-config        update 时以 --config 覆盖运行中的 server.ini
   --skip-firewall      不修改 ECS 本机防火墙
+  --apply-sql PATH     install/update 前执行 SQL 文件，可重复传入
+  --apply-niuma-sql    install/update 前执行项目内置 web_server SQL 迁移（v10、v11）
+  --db-host HOST       MySQL 地址（默认 127.0.0.1，也可用 DB_HOST）
+  --db-port PORT       MySQL 端口（默认 3306，也可用 DB_PORT）
+  --db-user USER       MySQL 用户（默认 root，也可用 DB_USER）
+  --db-password PASS   MySQL 密码（也可用 DB_PASSWORD）
+  --db-name NAME       MySQL 数据库（默认 niuma，也可用 DB_NAME）
 
 示例:
   sudo ./deploy/aliyun-deploy.sh install --config /root/niuma-server.ini
   sudo ./deploy/aliyun-deploy.sh update
+  sudo DB_PASSWORD='your-pass' ./deploy/aliyun-deploy.sh update --apply-niuma-sql
 EOF
 }
 
@@ -121,6 +136,37 @@ check_config() {
     fi
 }
 
+run_sql_migrations() {
+    [[ "${#SQL_FILES[@]}" -eq 0 ]] && return
+    command -v mysql >/dev/null 2>&1 || die "需要 mysql 客户端才能执行 --apply-sql"
+    require_number "--db-port" "$DB_PORT"
+    [[ -n "$DB_USER" ]] || die "--db-user 不能为空"
+    [[ -n "$DB_NAME" ]] || die "--db-name 不能为空"
+
+    local mysql_args
+    mysql_args=(--host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" "$DB_NAME")
+    if [[ -n "$DB_PASSWORD" ]]; then
+        export MYSQL_PWD="$DB_PASSWORD"
+    fi
+    for sql_file in "${SQL_FILES[@]}"; do
+        [[ -f "$sql_file" ]] || die "SQL 文件不存在：${sql_file}"
+        log "执行 SQL 迁移：${sql_file}"
+        mysql "${mysql_args[@]}" < "$sql_file"
+    done
+    if [[ -n "$DB_PASSWORD" ]]; then
+        unset MYSQL_PWD
+    fi
+}
+
+append_builtin_sql_migrations() {
+    ${APPLY_NIUMA_SQL} || return
+    local web_sql_dir="${PROJECT_DIR}/../web_server/web-server/sql"
+    SQL_FILES+=(
+        "${web_sql_dir}/v10_agency_commission.sql"
+        "${web_sql_dir}/v11_fixed_score_and_room_options.sql"
+    )
+}
+
 prepare_runtime_config() {
     local deployed_config="${RUNTIME_DIR}/config/server.ini"
     mkdir -p "${RUNTIME_DIR}/config" "${RUNTIME_DIR}/log" "${RUNTIME_DIR}/backup"
@@ -176,6 +222,8 @@ install_or_update() {
     ensure_docker
     open_local_firewall
     prepare_runtime_config
+    append_builtin_sql_migrations
+    run_sql_migrations
     build_image
     start_container
     log "部署完成；请使用 status 或 logs 确认服务连接到了 MySQL、Redis 和 RabbitMQ。"
@@ -210,7 +258,7 @@ esac
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --config|--public-host|--runtime-dir|--tcp-port|--ws-port|--build-jobs)
+        --config|--public-host|--runtime-dir|--tcp-port|--ws-port|--build-jobs|--apply-sql|--db-host|--db-port|--db-user|--db-password|--db-name)
             [[ $# -ge 2 ]] || die "选项 $1 缺少参数"
             case "$1" in
                 --config) CONFIG_SOURCE="$2" ;;
@@ -219,10 +267,17 @@ while [[ $# -gt 0 ]]; do
                 --tcp-port) TCP_PORT="$2"; UPDATE_ENDPOINTS=true ;;
                 --ws-port) WS_PORT="$2"; UPDATE_ENDPOINTS=true ;;
                 --build-jobs) BUILD_JOBS="$2" ;;
+                --apply-sql) SQL_FILES+=("$2") ;;
+                --db-host) DB_HOST="$2" ;;
+                --db-port) DB_PORT="$2" ;;
+                --db-user) DB_USER="$2" ;;
+                --db-password) DB_PASSWORD="$2" ;;
+                --db-name) DB_NAME="$2" ;;
             esac
             shift 2
             ;;
         --sync-config) SYNC_CONFIG=true; shift ;;
+        --apply-niuma-sql) APPLY_NIUMA_SQL=true; shift ;;
         --skip-firewall) SKIP_FIREWALL=true; shift ;;
         -h|--help|help) usage; exit 0 ;;
         *) die "未知选项：$1" ;;

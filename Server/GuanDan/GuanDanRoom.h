@@ -39,7 +39,7 @@ namespace NiuMa
 	class GuanDanRoom : public GameRoom
 	{
 	public:
-		GuanDanRoom(const std::string& venueId, const std::string& number, int lvl);
+		GuanDanRoom(const std::string& venueId, const std::string& number, int lvl, const std::string& ruleConfig);
 		virtual ~GuanDanRoom();
 
 	public:
@@ -107,11 +107,17 @@ namespace NiuMa
 		// 开始发牌
 		void beginDeal();
 
+		// 解析房费、局数等整场结算配置
+		void parseRuleConfig(const std::string& cfg);
+
 		// 获取局号数
 		void getRoundNo();
 
 		// 开始进入GameState::Playing状态
 		void beginPlay();
+
+		// 发布整场房费扣除事件
+		void publishFinalRoomFee();
 
 		// 扣钻
 		void deductDiamond();
@@ -430,6 +436,9 @@ namespace NiuMa
 		// 房间编号
 		const std::string _number;
 
+		// 玩法配置JSON
+		const std::string _ruleConfig;
+
 		// 房间等级
 		const int _level;
 
@@ -442,6 +451,15 @@ namespace NiuMa
 		 * 局号数，每局递增
 		 */
 		int _roundNo;
+
+		// 整场局数上限，达到后结算房费并结束房间
+		int _roundLimit;
+
+		// 整场房费
+		int64_t _roomFee;
+
+		// 整场净胜负，用于判断房费承担者
+		int64_t _totalNetWins[4];
 
 		// 发牌器
 		std::shared_ptr<PokerDealer> _dealer;
