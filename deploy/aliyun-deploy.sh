@@ -23,6 +23,8 @@ DB_PASSWORD="${DB_PASSWORD:-}"
 DB_NAME="${DB_NAME:-niuma}"
 SQL_FILES=()
 APPLY_NIUMA_SQL=false
+APPLY_NIUMA_BOOTSTRAP_SQL=false
+RESET_PLAYER_DATA=false
 SYNC_CONFIG=false
 SKIP_FIREWALL=false
 UPDATE_ENDPOINTS=false
@@ -53,7 +55,10 @@ usage() {
   --sync-config        update 时以 --config 覆盖运行中的 server.ini
   --skip-firewall      不修改 ECS 本机防火墙
   --apply-sql PATH     install/update 前执行 SQL 文件，可重复传入
-  --apply-niuma-sql    install/update 前执行项目内置 web_server SQL 迁移（v10、v11）
+  --apply-niuma-sql    install/update 前执行项目内置 web_server SQL 迁移（v2_add、v3-v11）
+  --apply-niuma-bootstrap-sql
+                      install/update 前先执行 niuma.sql 与 v2_upgrade_step1.sql（包含 DROP TABLE，仅新库/重置库使用）
+  --reset-player-data  install/update 前执行 v12 业务数据重置脚本（清除旧玩家/房间/流水，仅保留平台积分池）
   --db-host HOST       MySQL 地址（默认 127.0.0.1，也可用 DB_HOST）
   --db-port PORT       MySQL 端口（默认 3306，也可用 DB_PORT）
   --db-user USER       MySQL 用户（默认 root，也可用 DB_USER）
@@ -64,6 +69,8 @@ usage() {
   sudo ./deploy/aliyun-deploy.sh install --config /root/niuma-server.ini
   sudo ./deploy/aliyun-deploy.sh update
   sudo DB_PASSWORD='your-pass' ./deploy/aliyun-deploy.sh update --apply-niuma-sql
+  sudo DB_PASSWORD='your-pass' ./deploy/aliyun-deploy.sh install --apply-niuma-bootstrap-sql
+  sudo DB_PASSWORD='your-pass' ./deploy/aliyun-deploy.sh update --apply-niuma-sql --reset-player-data
 EOF
 }
 
@@ -159,12 +166,29 @@ run_sql_migrations() {
 }
 
 append_builtin_sql_migrations() {
-    ${APPLY_NIUMA_SQL} || return
     local web_sql_dir="${PROJECT_DIR}/../web_server/web-server/sql"
-    SQL_FILES+=(
-        "${web_sql_dir}/v10_agency_commission.sql"
-        "${web_sql_dir}/v11_fixed_score_and_room_options.sql"
-    )
+    if ${APPLY_NIUMA_BOOTSTRAP_SQL}; then
+        SQL_FILES+=(
+            "${web_sql_dir}/niuma.sql"
+            "${web_sql_dir}/v2_upgrade_step1.sql"
+        )
+    fi
+    if ${APPLY_NIUMA_SQL}; then
+        SQL_FILES+=(
+            "${web_sql_dir}/v2_add_regional_games.sql"
+            "${web_sql_dir}/v3_add_rule_config.sql"
+            "${web_sql_dir}/v4_add_record_tables.sql"
+            "${web_sql_dir}/v5_add_doudizhu.sql"
+            "${web_sql_dir}/v6_add_game_record_tables.sql"
+            "${web_sql_dir}/v7_game_record_retention.sql"
+            "${web_sql_dir}/v7_fix_doudizhu_two_player_rule.sql"
+            "${web_sql_dir}/v8_fix_doudizhu_standard_hand_count.sql"
+            "${web_sql_dir}/v9_fix_paodekuai_turn_timeout.sql"
+            "${web_sql_dir}/v10_agency_commission.sql"
+            "${web_sql_dir}/v11_fixed_score_and_room_options.sql"
+        )
+    fi
+    ${RESET_PLAYER_DATA} && SQL_FILES+=("${web_sql_dir}/v12_reset_players_for_new_rules.sql")
 }
 
 prepare_runtime_config() {
@@ -278,6 +302,8 @@ while [[ $# -gt 0 ]]; do
             ;;
         --sync-config) SYNC_CONFIG=true; shift ;;
         --apply-niuma-sql) APPLY_NIUMA_SQL=true; shift ;;
+        --apply-niuma-bootstrap-sql) APPLY_NIUMA_BOOTSTRAP_SQL=true; APPLY_NIUMA_SQL=true; shift ;;
+        --reset-player-data) RESET_PLAYER_DATA=true; APPLY_NIUMA_SQL=true; shift ;;
         --skip-firewall) SKIP_FIREWALL=true; shift ;;
         -h|--help|help) usage; exit 0 ;;
         *) die "未知选项：$1" ;;
