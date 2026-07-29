@@ -82,7 +82,9 @@ update_cached(MAHJONG_LIBRARY "")
 update_cached(POKER_LIBRARY "")
 
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost REQUIRED COMPONENTS log log_setup filesystem system)
+# Keep log_setup before log. With static Boost on Amazon Linux 2023,
+# libboost_log_setup depends on symbols provided by libboost_log.
+find_package(Boost REQUIRED COMPONENTS log_setup log filesystem system)
 if(Boost_FOUND)
   message("${Boost_INCLUDE_DIRS}")
   message("${Boost_LIBRARIES}")
