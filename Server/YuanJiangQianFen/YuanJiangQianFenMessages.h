@@ -123,7 +123,15 @@ namespace NiuMa
 		MSG_PACK_IMPL
 	public:
 		int totalScores[4]; int64_t totalGolds[4]; std::string playerIds[4];
-		MSGPACK_DEFINE_MAP(totalScores, totalGolds, playerIds);
+		int64_t roomFeeTotal;
+		std::vector<std::string> roomFeePlayerIds;
+		std::vector<int64_t> roomFeeAmounts;
+		int64_t shuffleFeeTotal;
+		std::vector<std::string> shuffleFeePlayerIds;
+		std::vector<int64_t> shuffleFeeAmounts;
+		MSGPACK_DEFINE_MAP(totalScores, totalGolds, playerIds,
+			roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
+			shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
 	};
 }
 

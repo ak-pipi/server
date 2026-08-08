@@ -130,11 +130,21 @@ namespace NiuMa
 		bool kick;
 			int64_t golds[4];
 			int winGolds[4];
+			int huScores[4];
+			int gangScores[4];
 			MahjongTile birdTile;
 			int birdMultiplier;
 			MahjongSettlement data;
+			int64_t roomFeeTotal;
+			std::vector<std::string> roomFeePlayerIds;
+			std::vector<int64_t> roomFeeAmounts;
+			int64_t shuffleFeeTotal;
+			std::vector<std::string> shuffleFeePlayerIds;
+			std::vector<int64_t> shuffleFeeAmounts;
 
-			MSGPACK_DEFINE_MAP(kick, golds, winGolds, birdTile, birdMultiplier, data);
+			MSGPACK_DEFINE_MAP(kick, golds, winGolds, huScores, gangScores, birdTile, birdMultiplier, data,
+				roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
+				shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
 		};
 
 	/**

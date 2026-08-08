@@ -859,11 +859,19 @@ namespace NiuMa
 		// 下一局的级牌点数
 		int gradePointNext;
 
-		// 收到消息的玩家是否被踢出房间
-		bool kicks[4];
+			// 收到消息的玩家是否被踢出房间
+			bool kicks[4];
+			int64_t roomFeeTotal;
+			std::vector<std::string> roomFeePlayerIds;
+			std::vector<int64_t> roomFeeAmounts;
+			int64_t shuffleFeeTotal;
+			std::vector<std::string> shuffleFeePlayerIds;
+			std::vector<int64_t> shuffleFeeAmounts;
 
-		MSGPACK_DEFINE_MAP(finishedSeats, gradePointNext, kicks);
-	};
+			MSGPACK_DEFINE_MAP(finishedSeats, gradePointNext, kicks,
+				roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
+				shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
+		};
 
 	/**
 	 * 通知解散投票消息

@@ -147,13 +147,21 @@ namespace NiuMa
 		std::vector<int> hitSeats;
 		int birdMultiple;
 		int qiShouHuSeat;
-		int qiShouHuType;
-		int qiShouHuScore;
-		MahjongSettlement data;
+			int qiShouHuType;
+			int qiShouHuScore;
+			MahjongSettlement data;
+			int64_t roomFeeTotal;
+			std::vector<std::string> roomFeePlayerIds;
+			std::vector<int64_t> roomFeeAmounts;
+			int64_t shuffleFeeTotal;
+			std::vector<std::string> shuffleFeePlayerIds;
+			std::vector<int64_t> shuffleFeeAmounts;
 
-		MSGPACK_DEFINE_MAP(kick, golds, winGolds, birdTiles, hitSeats, birdMultiple,
-			qiShouHuSeat, qiShouHuType, qiShouHuScore, data);
-	};
+			MSGPACK_DEFINE_MAP(kick, golds, winGolds, birdTiles, hitSeats, birdMultiple,
+				qiShouHuSeat, qiShouHuType, qiShouHuScore, data,
+				roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
+				shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
+		};
 
 	/**
 	 * 通知起手胡消息

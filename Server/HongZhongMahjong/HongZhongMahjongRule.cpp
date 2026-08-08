@@ -39,6 +39,13 @@ namespace NiuMa
 			tp.style = style;
 			tps.push_back(tp);
 		}
+
+		int clampFixedHongZhongCount(const MahjongTileArray& tiles, int fixedHongZhongCount) {
+			if (fixedHongZhongCount <= 0)
+				return 0;
+			int total = HongZhongMahjongRule::countHongZhong(tiles);
+			return std::min(fixedHongZhongCount, total);
+		}
 	}
 
 	HongZhongMahjongRule::HongZhongMahjongRule()
@@ -142,19 +149,25 @@ namespace NiuMa
 
 	HongZhongMahjongRule::HuAnalysis HongZhongMahjongRule::analyzeHu(const MahjongTileArray& handTiles,
 		const MahjongChapterArray& chapters) {
+		return analyzeHu(handTiles, chapters, 0);
+	}
+
+	HongZhongMahjongRule::HuAnalysis HongZhongMahjongRule::analyzeHu(const MahjongTileArray& handTiles,
+		const MahjongChapterArray& chapters, int fixedHongZhongCount) {
 		HuAnalysis result;
 		if (handTiles.empty() || (handTiles.size() % 3) != 2)
 			return result;
+		fixedHongZhongCount = clampFixedHongZhongCount(handTiles, fixedHongZhongCount);
 
 		for (const MahjongChapter& chapter : chapters) {
 			if (chapter.getType() == MahjongChapter::Type::Chi)
 				return result;
 		}
 
-		bool pingHu = canPingHu(handTiles);
-		bool qiXiaoDui = chapters.empty() && canQiXiaoDui(handTiles);
-		bool pengPengHu = allChaptersKeZi(chapters) && canPengPengHu(handTiles);
-		bool qingYiSe = allSameSuit(handTiles, chapters) && (pingHu || qiXiaoDui || pengPengHu);
+		bool pingHu = canPingHu(handTiles, fixedHongZhongCount);
+		bool qiXiaoDui = chapters.empty() && canQiXiaoDui(handTiles, fixedHongZhongCount);
+		bool pengPengHu = allChaptersKeZi(chapters) && canPengPengHu(handTiles, fixedHongZhongCount);
+		bool qingYiSe = allSameSuit(handTiles, chapters, fixedHongZhongCount) && (pingHu || qiXiaoDui || pengPengHu);
 		if (!pingHu && !qiXiaoDui && !pengPengHu && !qingYiSe)
 			return result;
 
@@ -173,15 +186,15 @@ namespace NiuMa
 		return result;
 	}
 
-	bool HongZhongMahjongRule::canPingHu(const MahjongTileArray& tiles) {
+	bool HongZhongMahjongRule::canPingHu(const MahjongTileArray& tiles, int fixedHongZhongCount) {
 		if (tiles.empty() || (tiles.size() % 3) != 2)
 			return false;
 
 		int counts[3][9] = { {0} };
-		int wild = 0;
+		int totalHongZhong = 0;
 		for (const MahjongTile& mt : tiles) {
 			if (isHongZhong(mt)) {
-				wild++;
+				totalHongZhong++;
 				continue;
 			}
 			if (!isNumberTile(mt))
@@ -190,6 +203,8 @@ namespace NiuMa
 			int n = static_cast<int>(mt.getNumber()) - 1;
 			counts[p][n]++;
 		}
+		fixedHongZhongCount = std::min(std::max(0, fixedHongZhongCount), totalHongZhong);
+		int wild = totalHongZhong - fixedHongZhongCount;
 
 		for (int p = 0; p < 3; p++) {
 			for (int n = 0; n < 9; n++) {
@@ -197,14 +212,14 @@ namespace NiuMa
 					int tmp[3][9];
 					copyCounts(tmp, counts);
 					tmp[p][n] -= 2;
-					if (canFormMelds(tmp, wild))
+					if (canFormMeldsWithFixedHongZhong(tmp, wild, fixedHongZhongCount))
 						return true;
 				}
 				if (counts[p][n] >= 1 && wild >= 1) {
 					int tmp[3][9];
 					copyCounts(tmp, counts);
 					tmp[p][n] -= 1;
-					if (canFormMelds(tmp, wild - 1))
+					if (canFormMeldsWithFixedHongZhong(tmp, wild - 1, fixedHongZhongCount))
 						return true;
 				}
 			}
@@ -212,27 +227,41 @@ namespace NiuMa
 		if (wild >= 2) {
 			int tmp[3][9];
 			copyCounts(tmp, counts);
-			if (canFormMelds(tmp, wild - 2))
+			if (canFormMeldsWithFixedHongZhong(tmp, wild - 2, fixedHongZhongCount))
 				return true;
+		}
+		for (int useFixed = 1; useFixed <= std::min(2, fixedHongZhongCount); useFixed++) {
+			int needWild = 2 - useFixed;
+			if (wild >= needWild) {
+				int tmp[3][9];
+				copyCounts(tmp, counts);
+				if (canFormMeldsWithFixedHongZhong(tmp, wild - needWild, fixedHongZhongCount - useFixed))
+					return true;
+			}
 		}
 		return false;
 	}
 
-	bool HongZhongMahjongRule::canQiXiaoDui(const MahjongTileArray& tiles) {
+	bool HongZhongMahjongRule::canQiXiaoDui(const MahjongTileArray& tiles, int fixedHongZhongCount) {
 		if (tiles.size() != 14)
 			return false;
 
 		std::map<MahjongTile::Tile, int> counts;
-		int wild = 0;
+		int totalHongZhong = 0;
+		MahjongTile::Tile hongZhongTile(MahjongTile::Pattern::Zhong);
 		for (const MahjongTile& mt : tiles) {
 			if (isHongZhong(mt)) {
-				wild++;
+				totalHongZhong++;
 				continue;
 			}
 			if (!isNumberTile(mt))
 				return false;
 			counts[mt.getTile()]++;
 		}
+		fixedHongZhongCount = std::min(std::max(0, fixedHongZhongCount), totalHongZhong);
+		int wild = totalHongZhong - fixedHongZhongCount;
+		if (fixedHongZhongCount > 0)
+			counts[hongZhongTile] += fixedHongZhongCount;
 
 		int needWild = 0;
 		for (const auto& kv : counts) {
@@ -244,15 +273,15 @@ namespace NiuMa
 		return ((wild - needWild) % 2) == 0;
 	}
 
-	bool HongZhongMahjongRule::canPengPengHu(const MahjongTileArray& tiles) {
+	bool HongZhongMahjongRule::canPengPengHu(const MahjongTileArray& tiles, int fixedHongZhongCount) {
 		if (tiles.empty() || (tiles.size() % 3) != 2)
 			return false;
 
 		int counts[3][9] = { {0} };
-		int wild = 0;
+		int totalHongZhong = 0;
 		for (const MahjongTile& mt : tiles) {
 			if (isHongZhong(mt)) {
-				wild++;
+				totalHongZhong++;
 				continue;
 			}
 			if (!isNumberTile(mt))
@@ -261,6 +290,8 @@ namespace NiuMa
 			int n = static_cast<int>(mt.getNumber()) - 1;
 			counts[p][n]++;
 		}
+		fixedHongZhongCount = std::min(std::max(0, fixedHongZhongCount), totalHongZhong);
+		int wild = totalHongZhong - fixedHongZhongCount;
 
 		for (int p = 0; p < 3; p++) {
 			for (int n = 0; n < 9; n++) {
@@ -268,14 +299,14 @@ namespace NiuMa
 					int tmp[3][9];
 					copyCounts(tmp, counts);
 					tmp[p][n] -= 2;
-					if (canFormKeZiOnly(tmp, wild))
+					if (canFormKeZiOnlyWithFixedHongZhong(tmp, wild, fixedHongZhongCount))
 						return true;
 				}
 				if (counts[p][n] >= 1 && wild >= 1) {
 					int tmp[3][9];
 					copyCounts(tmp, counts);
 					tmp[p][n] -= 1;
-					if (canFormKeZiOnly(tmp, wild - 1))
+					if (canFormKeZiOnlyWithFixedHongZhong(tmp, wild - 1, fixedHongZhongCount))
 						return true;
 				}
 			}
@@ -283,8 +314,17 @@ namespace NiuMa
 		if (wild >= 2) {
 			int tmp[3][9];
 			copyCounts(tmp, counts);
-			if (canFormKeZiOnly(tmp, wild - 2))
+			if (canFormKeZiOnlyWithFixedHongZhong(tmp, wild - 2, fixedHongZhongCount))
 				return true;
+		}
+		for (int useFixed = 1; useFixed <= std::min(2, fixedHongZhongCount); useFixed++) {
+			int needWild = 2 - useFixed;
+			if (wild >= needWild) {
+				int tmp[3][9];
+				copyCounts(tmp, counts);
+				if (canFormKeZiOnlyWithFixedHongZhong(tmp, wild - needWild, fixedHongZhongCount - useFixed))
+					return true;
+			}
 		}
 		return false;
 	}
@@ -342,6 +382,21 @@ namespace NiuMa
 		return (wildLeft % 3) == 0;
 	}
 
+	bool HongZhongMahjongRule::canFormMeldsWithFixedHongZhong(int counts[3][9], int wildLeft, int fixedHongZhongCount) {
+		if (wildLeft < 0 || fixedHongZhongCount < 0)
+			return false;
+		if (fixedHongZhongCount == 0)
+			return canFormMelds(counts, wildLeft);
+
+		int needWild = 0;
+		int remain = fixedHongZhongCount % 3;
+		if (remain != 0)
+			needWild = 3 - remain;
+		if (needWild > wildLeft)
+			return false;
+		return canFormMelds(counts, wildLeft - needWild);
+	}
+
 	bool HongZhongMahjongRule::canFormKeZiOnly(const int counts[3][9], int wildLeft) {
 		int needWild = 0;
 		for (int p = 0; p < 3; p++) {
@@ -356,7 +411,24 @@ namespace NiuMa
 		return ((wildLeft - needWild) % 3) == 0;
 	}
 
-	bool HongZhongMahjongRule::allSameSuit(const MahjongTileArray& handTiles, const MahjongChapterArray& chapters) {
+	bool HongZhongMahjongRule::canFormKeZiOnlyWithFixedHongZhong(const int counts[3][9], int wildLeft, int fixedHongZhongCount) {
+		if (wildLeft < 0 || fixedHongZhongCount < 0)
+			return false;
+		if (fixedHongZhongCount == 0)
+			return canFormKeZiOnly(counts, wildLeft);
+
+		int needWild = 0;
+		int remain = fixedHongZhongCount % 3;
+		if (remain != 0)
+			needWild = 3 - remain;
+		if (needWild > wildLeft)
+			return false;
+		return canFormKeZiOnly(counts, wildLeft - needWild);
+	}
+
+	bool HongZhongMahjongRule::allSameSuit(const MahjongTileArray& handTiles, const MahjongChapterArray& chapters, int fixedHongZhongCount) {
+		if (fixedHongZhongCount > 0)
+			return false;
 		bool found = false;
 		MahjongTile::Pattern suit = MahjongTile::Pattern::Invalid;
 		auto testTile = [&](const MahjongTile& mt) -> bool {

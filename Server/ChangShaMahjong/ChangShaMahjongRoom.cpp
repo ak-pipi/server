@@ -248,6 +248,31 @@ namespace NiuMa
 			_kicks[i] = false;
 	}
 
+	bool ChangShaMahjongRoom::canShuffleCardsBeforeNextRound(const std::string& playerId,
+		int& nextRoundNo,
+		int& roundCount,
+		std::string& errMsg) const {
+		nextRoundNo = _roundNo + 1;
+		roundCount = _roundCount;
+		if (!hasAvatar(playerId)) {
+			errMsg = "你不在当前房间内";
+			return false;
+		}
+		if (_roundNo <= 0) {
+			errMsg = "首局开始前不能洗牌";
+			return false;
+		}
+		if (_roundCount > 0 && _roundNo >= _roundCount) {
+			errMsg = "全部对局已结束，不能洗牌";
+			return false;
+		}
+		if (_roundState != StageState::NotStarted) {
+			errMsg = "下局开始前才能洗牌";
+			return false;
+		}
+		return true;
+	}
+
 	double* ChangShaMahjongRoom::getDistances() {
 		return _distances;
 	}
@@ -438,6 +463,19 @@ namespace NiuMa
 				msg.golds[i] = task->getGold() + avatar->getCashPledge();
 			if (!test)
 				_kicks[i] = true;
+		}
+		if (allRoundsFinished) {
+			std::vector<std::pair<std::string, int64_t>> netWins;
+			for (int i = 0; i < getMaxPlayerNums(); i++) {
+				avatar = dynamic_cast<ChangShaMahjongAvatar*>(getAvatar(i).get());
+				if (avatar == nullptr)
+					continue;
+				netWins.emplace_back(avatar->getPlayerId(), _totalWinGolds[i]);
+			}
+			calcRoomFeeSettlementData(_roomFee, netWins,
+				msg.roomFeeTotal, msg.roomFeePlayerIds, msg.roomFeeAmounts);
+			getShuffleFeeSettlementData(msg.shuffleFeeTotal,
+				msg.shuffleFeePlayerIds, msg.shuffleFeeAmounts);
 		}
 
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
@@ -1052,6 +1090,23 @@ namespace NiuMa
 
 	void ChangShaMahjongRoom::disbandRoom() {
 		_disbandState = StageState::Finished;
+		if (_roundNo > 0) {
+			MsgChangShaSettlement settlement;
+			settlement.kick = false;
+			std::vector<std::pair<std::string, int64_t>> netWins;
+			for (int i = 0; i < getMaxPlayerNums(); i++) {
+				auto avatar = std::dynamic_pointer_cast<ChangShaMahjongAvatar>(getAvatar(i));
+				if (!avatar)
+					continue;
+				settlement.winGolds[i] = static_cast<int>(_totalWinGolds[i]);
+				netWins.emplace_back(avatar->getPlayerId(), _totalWinGolds[i]);
+			}
+			calcRoomFeeSettlementData(_roomFee, netWins,
+				settlement.roomFeeTotal, settlement.roomFeePlayerIds, settlement.roomFeeAmounts);
+			getShuffleFeeSettlementData(settlement.shuffleFeeTotal,
+				settlement.shuffleFeePlayerIds, settlement.shuffleFeeAmounts);
+			sendMessageToAll(settlement);
+		}
 		MsgDisband msg;
 		sendMessageToAll(msg);
 		_roundState = StageState::NotStarted;

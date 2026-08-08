@@ -58,7 +58,8 @@ namespace NiuMa
 				tiles.push_back(mt);
 		}
 		std::sort(tiles.begin(), tiles.end());
-		HongZhongMahjongRule::HuAnalysis analysis = HongZhongMahjongRule::analyzeHu(tiles, _chapters);
+		int fixedHongZhongCount = (!bZiMo && HongZhongMahjongRule::isHongZhong(mt)) ? 1 : 0;
+		HongZhongMahjongRule::HuAnalysis analysis = HongZhongMahjongRule::analyzeHu(tiles, _chapters, fixedHongZhongCount);
 		if (!analysis.hu)
 			return false;
 		_huStyle = analysis.style;

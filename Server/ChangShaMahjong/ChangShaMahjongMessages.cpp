@@ -58,6 +58,8 @@ namespace NiuMa
 		, qiShouHuSeat(-1)
 		, qiShouHuType(0)
 		, qiShouHuScore(0)
+		, roomFeeTotal(0)
+		, shuffleFeeTotal(0)
 	{
 		for (int i = 0; i < 4; i++) {
 			golds[i] = 0LL;

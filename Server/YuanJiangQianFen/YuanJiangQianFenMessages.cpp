@@ -22,7 +22,7 @@ namespace NiuMa
 	MsgQianFenCallScoreNotify::MsgQianFenCallScoreNotify() : seat(-1), score(0), nextSeat(-1), bankerSeat(-1) {}
 	MsgQianFenPlayNotify::MsgQianFenPlayNotify() : seat(-1), nextPlayer(-1) {}
 	MsgQianFenRoundResult::MsgQianFenRoundResult() { for (int i = 0; i < 4; i++) { scores[i] = 0; winGolds[i] = 0; roundScoreCards[i] = 0; } }
-	MsgQianFenFinalResult::MsgQianFenFinalResult() { for (int i = 0; i < 4; i++) { totalScores[i] = 0; totalGolds[i] = 0; } }
+	MsgQianFenFinalResult::MsgQianFenFinalResult() : roomFeeTotal(0), shuffleFeeTotal(0) { for (int i = 0; i < 4; i++) { totalScores[i] = 0; totalGolds[i] = 0; } }
 
 	void YuanJiangQianFenMessages::registMessages() {
 		IMsgCreator::Ptr creator1 = IMsgCreator::Ptr(new MsgCreator<MsgQianFenSync>());

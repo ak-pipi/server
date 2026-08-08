@@ -304,12 +304,20 @@ namespace NiuMa
 		// 结算倍数
 		int multiplier;
 
-		// 是否关门/春天
-		bool spring;
+			// 是否关门/春天
+			bool spring;
+			int64_t roomFeeTotal;
+			std::vector<std::string> roomFeePlayerIds;
+			std::vector<int64_t> roomFeeAmounts;
+			int64_t shuffleFeeTotal;
+			std::vector<std::string> shuffleFeePlayerIds;
+			std::vector<int64_t> shuffleFeeAmounts;
 
-		MSGPACK_DEFINE_MAP(winnerSeat, scores, winGolds, remainCards,
-			roundNo, roundCount, baseScore, bombCount, multiplier, spring);
-	};
+			MSGPACK_DEFINE_MAP(winnerSeat, scores, winGolds, remainCards,
+				roundNo, roundCount, baseScore, bombCount, multiplier, spring,
+				roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
+				shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
+		};
 
 	/**
 	 * 通知解散投票消息

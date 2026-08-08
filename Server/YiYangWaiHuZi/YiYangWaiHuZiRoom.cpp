@@ -86,6 +86,7 @@ namespace NiuMa
 	}
 
 	void YiYangWaiHuZiRoom::clean() {
+		GameRoom::clean();
 		_gameState = GameState::None;
 		_roundNo = 0;
 		_tilePool.clear();
@@ -96,6 +97,31 @@ namespace NiuMa
 			auto a = getAvatar(_si);
 			if (a) a->clear();
 		}
+	}
+
+	bool YiYangWaiHuZiRoom::canShuffleCardsBeforeNextRound(const std::string& playerId,
+		int& nextRoundNo,
+		int& roundCount,
+		std::string& errMsg) const {
+		nextRoundNo = _roundNo + 1;
+		roundCount = _roundLimit;
+		if (!hasAvatar(playerId)) {
+			errMsg = "你不在当前房间内";
+			return false;
+		}
+		if (_roundNo <= 0) {
+			errMsg = "首局开始前不能洗牌";
+			return false;
+		}
+		if (_roundLimit > 0 && _roundNo >= _roundLimit) {
+			errMsg = "全部对局已结束，不能洗牌";
+			return false;
+		}
+		if (_gameState != GameState::Ready && _gameState != GameState::None) {
+			errMsg = "下局开始前才能洗牌";
+			return false;
+		}
+		return true;
 	}
 
 	void YiYangWaiHuZiRoom::onTimer() {}
@@ -607,9 +633,22 @@ namespace NiuMa
 			if (a && idx < 3) {
 				msg->scores[idx] = a->getRoundScore();
 				msg->winGolds[idx] = a->getWinGold();
+				}
+				idx++;
 			}
-			idx++;
+			if (_roundLimit > 0 && _roundNo >= _roundLimit) {
+				std::vector<std::pair<std::string, int64_t>> netWins;
+				for (int _si = 0; _si < _playerCount && _si < 3; _si++) {
+					auto a = getAvatar(_si);
+					if (!a)
+						continue;
+					netWins.emplace_back(a->getPlayerId(), _totalWinGolds[_si]);
+				}
+				calcRoomFeeSettlementData(_roomFee, netWins,
+					msg->roomFeeTotal, msg->roomFeePlayerIds, msg->roomFeeAmounts);
+				getShuffleFeeSettlementData(msg->shuffleFeeTotal,
+					msg->shuffleFeePlayerIds, msg->shuffleFeeAmounts);
+			}
+				sendMessageToAll(*msg);
+			}
 		}
-		sendMessageToAll(*msg);
-	}
-}

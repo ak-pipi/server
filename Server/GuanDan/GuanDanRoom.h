@@ -93,6 +93,10 @@ namespace NiuMa
 		virtual void getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const override;
 		// 清理
 		virtual void clean() override;
+		virtual bool canShuffleCardsBeforeNextRound(const std::string& playerId,
+			int& nextRoundNo,
+			int& roundCount,
+			std::string& errMsg) const override;
 
 	private:
 		// 返回当前房间所属的区域id

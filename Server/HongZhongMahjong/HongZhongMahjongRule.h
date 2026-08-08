@@ -40,15 +40,18 @@ namespace NiuMa
 		static int countHongZhong(const MahjongTileArray& tiles);
 		static int countHongZhong(const MahjongChapterArray& chapters);
 		static HuAnalysis analyzeHu(const MahjongTileArray& handTiles, const MahjongChapterArray& chapters);
+		static HuAnalysis analyzeHu(const MahjongTileArray& handTiles, const MahjongChapterArray& chapters, int fixedHongZhongCount);
 
 	private:
 		static bool isNumberTile(const MahjongTile& tile);
-		static bool canPingHu(const MahjongTileArray& tiles);
-		static bool canQiXiaoDui(const MahjongTileArray& tiles);
-		static bool canPengPengHu(const MahjongTileArray& tiles);
+		static bool canPingHu(const MahjongTileArray& tiles, int fixedHongZhongCount = 0);
+		static bool canQiXiaoDui(const MahjongTileArray& tiles, int fixedHongZhongCount = 0);
+		static bool canPengPengHu(const MahjongTileArray& tiles, int fixedHongZhongCount = 0);
 		static bool canFormMelds(int counts[3][9], int wildLeft);
+		static bool canFormMeldsWithFixedHongZhong(int counts[3][9], int wildLeft, int fixedHongZhongCount);
 		static bool canFormKeZiOnly(const int counts[3][9], int wildLeft);
-		static bool allSameSuit(const MahjongTileArray& handTiles, const MahjongChapterArray& chapters);
+		static bool canFormKeZiOnlyWithFixedHongZhong(const int counts[3][9], int wildLeft, int fixedHongZhongCount);
+		static bool allSameSuit(const MahjongTileArray& handTiles, const MahjongChapterArray& chapters, int fixedHongZhongCount = 0);
 		static bool allChaptersKeZi(const MahjongChapterArray& chapters);
 	};
 }

@@ -18,8 +18,10 @@ namespace NiuMa
 		virtual void initialize();
 
 	public:
-		// 所有玩家的本局获利的金币数量
+		// 所有玩家的本局积分变化
 		int winGolds[4];
+		int huScores[4];
+		int gangScores[4];
 
 			// 结算数据
 			MahjongSettlement settlement;
@@ -30,7 +32,8 @@ namespace NiuMa
 			// 随机种子hash（合规随机算法审计）
 			std::string randomSeedHash;
 
-			MSGPACK_DEFINE_MAP(dealedTiles, chapters, actions, actors, winGolds, settlement, birdTile, birdMultiplier, randomSeedHash);
+			MSGPACK_DEFINE_MAP(dealedTiles, chapters, actions, actors, winGolds, huScores, gangScores,
+				settlement, birdTile, birdMultiplier, randomSeedHash);
 		};
 }
 

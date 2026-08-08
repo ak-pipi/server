@@ -29,7 +29,7 @@ namespace NiuMa
 
 	MsgWaiHuZiActionNotify::MsgWaiHuZiActionNotify() : seat(-1), action(0), nextPlayer(-1) {}
 
-	MsgWaiHuZiSettlement::MsgWaiHuZiSettlement() : huSeat(-1), huXi(0) {
+	MsgWaiHuZiSettlement::MsgWaiHuZiSettlement() : huSeat(-1), huXi(0), roomFeeTotal(0), shuffleFeeTotal(0) {
 		for (int i = 0; i < 3; i++) { scores[i] = 0; winGolds[i] = 0.0; }
 	}
 

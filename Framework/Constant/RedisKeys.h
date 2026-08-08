@@ -47,7 +47,7 @@ namespace NiuMa {
 		static const std::string SERVER_ACCESS_ADDRESS;
 
 		// 场地服务器websocket地址，后加服务器id
-		// 数据格式为ws://ip:port/，例如ws://192.168.1.100:9098/
+		// 数据格式为wss://domain:port/，例如wss://game.example.com:9098/
 		static const std::string SERVER_WS_ADDRESS;
 
 		// 场地服务器保活时间，后加服务器id

@@ -238,6 +238,39 @@ namespace NiuMa {
 			const std::string& remark,
 			int64_t winThreshold = 10);
 
+		/**
+		 * 计算整场房费分摊展示数据，不产生扣费事件。
+		 */
+		void calcRoomFeeSettlementData(int64_t roomFee,
+			const std::vector<std::pair<std::string, int64_t>>& netWins,
+			int64_t& roomFeeTotal,
+			std::vector<std::string>& roomFeePlayerIds,
+			std::vector<int64_t>& roomFeeAmounts,
+			int64_t winThreshold = 10) const;
+
+		/**
+		 * 处理下局开始前洗牌扣分。
+		 * 每名真实玩家在同一个待开局号前只允许洗牌一次，每次扣1积分。
+		 */
+		bool handleShuffleCardsBeforeNextRound(const std::string& playerId,
+			int nextRoundNo,
+			const std::string& bizType,
+			const std::string& remark,
+			std::string& errMsg,
+			int64_t fee = 1);
+
+		/**
+		 * 获取整场洗牌扣分展示数据，不产生扣费事件。
+		 */
+		void getShuffleFeeSettlementData(int64_t& shuffleFeeTotal,
+			std::vector<std::string>& shuffleFeePlayerIds,
+			std::vector<int64_t>& shuffleFeeAmounts) const;
+
+		/**
+		 * 获取指定玩家整场洗牌扣分总额。
+		 */
+		int64_t getShuffleFeeAmount(const std::string& playerId) const;
+
 	public:
 		virtual bool onMessage(const NetMessage::Ptr& netMsg) override;
 		virtual void onConnect(const std::string& playerId) override;
@@ -315,6 +348,15 @@ namespace NiuMa {
 		 * @return 是否满足加入游戏的条件
 		 */
 		virtual bool checkJoin(int seat, const std::string& playerId, std::string& errMsg);
+
+		/**
+		 * 检查当前房间是否允许玩家在下一局前洗牌。
+		 * 默认不允许，由具体多局玩法暴露当前局号和总局数。
+		 */
+		virtual bool canShuffleCardsBeforeNextRound(const std::string& playerId,
+			int& nextRoundNo,
+			int& roundCount,
+			std::string& errMsg) const;
 
 		/**
 		 * 通知添加玩家
@@ -502,6 +544,11 @@ namespace NiuMa {
 		void onPlayerGeolocation(const NetMessage::Ptr& netMsg);
 
 		/**
+		 * 玩家请求下局开始前洗牌
+		 */
+		void onShuffleCards(const NetMessage::Ptr& netMsg);
+
+		/**
 		 * 查询所有玩家之间的距离
 		 */
 		void onDistancesRequest(const NetMessage::Ptr& netMsg);
@@ -542,6 +589,12 @@ namespace NiuMa {
 
 		// 整场房费是否已经发布，避免正常结束/解散/离场路径重复扣费
 		bool _roomFeeSettled;
+
+		// key-待开始局号，value-已为该局洗牌扣分的玩家
+		std::unordered_map<int, std::unordered_set<std::string>> _shuffleRoundPlayers;
+
+		// key-玩家id，value-整场累计洗牌扣分
+		std::unordered_map<std::string, int64_t> _shuffleFeeAmounts;
 
 		// 座位上的玩家
 		GameAvatar::Ptr _avatarSeats[MAX_SEAT_NUMS];

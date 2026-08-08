@@ -47,10 +47,14 @@ namespace NiuMa
 	MsgHZSettlement::MsgHZSettlement()
 		: kick(false)
 		, birdMultiplier(1)
+		, roomFeeTotal(0)
+		, shuffleFeeTotal(0)
 	{
 		for (int i = 0; i < 4; i++) {
 			golds[i] = 0LL;
 			winGolds[i] = 0;
+			huScores[i] = 0;
+			gangScores[i] = 0;
 		}
 	}
 

@@ -58,7 +58,7 @@ usage() {
   --apply-niuma-sql    install/update 前执行项目内置 web_server SQL 迁移（v2_add、v3-v11）
   --apply-niuma-bootstrap-sql
                       install/update 前先执行 niuma.sql 与 v2_upgrade_step1.sql（包含 DROP TABLE，仅新库/重置库使用）
-  --reset-player-data  install/update 前执行 v12 业务数据重置脚本（清除旧玩家/房间/流水，仅保留平台积分池）
+  --reset-player-data  install/update 前执行 v17 业务数据重置脚本（清除旧玩家/房间/流水，仅保留平台根与超级管理员）
   --db-host HOST       MySQL 地址（默认 127.0.0.1，也可用 DB_HOST）
   --db-port PORT       MySQL 端口（默认 3306，也可用 DB_PORT）
   --db-user USER       MySQL 用户（默认 root，也可用 DB_USER）
@@ -186,9 +186,14 @@ append_builtin_sql_migrations() {
             "${web_sql_dir}/v9_fix_paodekuai_turn_timeout.sql"
             "${web_sql_dir}/v10_agency_commission.sql"
             "${web_sql_dir}/v11_fixed_score_and_room_options.sql"
+            "${web_sql_dir}/v13_add_system_log_tables.sql"
+            "${web_sql_dir}/v14_agent_workbench_and_menu_cleanup.sql"
+            "${web_sql_dir}/v15_fix_game_management_menu_encoding.sql"
+            "${web_sql_dir}/v16_permanent_agency_invite_codes.sql"
         )
     fi
-    ${RESET_PLAYER_DATA} && SQL_FILES+=("${web_sql_dir}/v12_reset_players_for_new_rules.sql")
+    ${RESET_PLAYER_DATA} && SQL_FILES+=("${web_sql_dir}/v17_player_id_invite_binding_reset.sql")
+    ${APPLY_NIUMA_SQL} && SQL_FILES+=("${web_sql_dir}/v18_restore_register_invite_codes.sql")
 }
 
 prepare_runtime_config() {

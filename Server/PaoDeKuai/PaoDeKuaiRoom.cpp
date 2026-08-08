@@ -160,6 +160,7 @@ namespace NiuMa
 	}
 
 	void PaoDeKuaiRoom::clean() {
+		GameRoom::clean();
 		_gameState = GameState::None;
 		_roundNo = 0;
 		_currentPlayer = 0;
@@ -181,6 +182,31 @@ namespace NiuMa
 				continue;
 			avatar->clear();
 		}
+	}
+
+	bool PaoDeKuaiRoom::canShuffleCardsBeforeNextRound(const std::string& playerId,
+		int& nextRoundNo,
+		int& roundCount,
+		std::string& errMsg) const {
+		nextRoundNo = _roundNo + 1;
+		roundCount = _rule ? _rule->getRoundCount() : 0;
+		if (!hasAvatar(playerId)) {
+			errMsg = "你不在当前房间内";
+			return false;
+		}
+		if (_roundNo <= 0) {
+			errMsg = "首局开始前不能洗牌";
+			return false;
+		}
+		if (roundCount > 0 && _roundNo >= roundCount) {
+			errMsg = "全部对局已结束，不能洗牌";
+			return false;
+		}
+		if (_gameState != GameState::None && _gameState != GameState::Ready) {
+			errMsg = "下局开始前才能洗牌";
+			return false;
+		}
+		return true;
 	}
 
 	void PaoDeKuaiRoom::onTimer() {
@@ -1031,6 +1057,39 @@ namespace NiuMa
 
 	void PaoDeKuaiRoom::disbandRoom() {
 		_dissolveRequested = false;
+		if (_roundNo > 0) {
+			MsgPaoDeKuaiSettlement settlement;
+			settlement.winnerSeat = 0;
+			int64_t bestScore = LLONG_MIN;
+			std::vector<std::pair<std::string, int64_t>> netWins;
+			for (int _si = 0; _si < 2; _si++) {
+				auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+				if (!avatar)
+					continue;
+				int64_t totalScore = avatar->getTotalScore();
+				settlement.scores[_si] = static_cast<int>(totalScore);
+				settlement.winGolds[_si] = totalScore;
+				const CardArray& cards = avatar->getCards();
+				for (auto& c : cards)
+					settlement.remainCards[_si].push_back(c.getId());
+				netWins.emplace_back(avatar->getPlayerId(), totalScore);
+				if (totalScore > bestScore) {
+					bestScore = totalScore;
+					settlement.winnerSeat = _si;
+				}
+			}
+			settlement.roundNo = _roundNo;
+			settlement.roundCount = _rule ? _rule->getRoundCount() : 0;
+			settlement.baseScore = _rule->getBaseScore();
+			settlement.bombCount = _bombCount;
+			settlement.multiplier = _multiplier;
+			settlement.spring = _spring;
+			calcRoomFeeSettlementData(_roomFee, netWins,
+				settlement.roomFeeTotal, settlement.roomFeePlayerIds, settlement.roomFeeAmounts);
+			getShuffleFeeSettlementData(settlement.shuffleFeeTotal,
+				settlement.shuffleFeePlayerIds, settlement.shuffleFeeAmounts);
+			sendMessageToAll(settlement);
+		}
 		MsgDisband msg;
 		sendMessageToAll(msg);
 		publishFinalRoomFee();
@@ -1112,6 +1171,19 @@ namespace NiuMa
 			const CardArray& cards = avatar->getCards();
 			for (auto& c : cards)
 				msg->remainCards[_si].push_back(c.getId());
+		}
+		if (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount()) {
+			std::vector<std::pair<std::string, int64_t>> netWins;
+			for (int _si = 0; _si < 2; _si++) {
+				auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+				if (!avatar)
+					continue;
+				netWins.emplace_back(avatar->getPlayerId(), avatar->getTotalScore());
+			}
+			calcRoomFeeSettlementData(_roomFee, netWins,
+				msg->roomFeeTotal, msg->roomFeePlayerIds, msg->roomFeeAmounts);
+			getShuffleFeeSettlementData(msg->shuffleFeeTotal,
+				msg->shuffleFeePlayerIds, msg->shuffleFeeAmounts);
 		}
 
 		sendMessageToAll(*msg);

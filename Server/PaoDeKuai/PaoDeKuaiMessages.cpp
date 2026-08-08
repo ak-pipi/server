@@ -60,6 +60,8 @@ namespace NiuMa
 		, bombCount(0)
 		, multiplier(1)
 		, spring(false)
+		, roomFeeTotal(0)
+		, shuffleFeeTotal(0)
 	{
 		for (int i = 0; i < 2; i++) {
 			scores[i] = 0;

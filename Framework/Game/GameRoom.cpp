@@ -108,6 +108,8 @@ namespace NiuMa
 			onGetSpectators(netMsg);
 		else if (msgType == MsgPlayerGeolocation::TYPE)
 			onPlayerGeolocation(netMsg);
+		else if (msgType == MsgShuffleCards::TYPE)
+			onShuffleCards(netMsg);
 		else if (msgType == MsgGetDistances::TYPE)
 			onDistancesRequest(netMsg);
 		else if (MsgChatClient::TYPE == msgType)
@@ -446,6 +448,16 @@ namespace NiuMa
 
 	bool GameRoom::checkJoin(int seat, const std::string& playerId, std::string& errMsg) {
 		return true;
+	}
+
+	bool GameRoom::canShuffleCardsBeforeNextRound(const std::string& playerId,
+		int& nextRoundNo,
+		int& roundCount,
+		std::string& errMsg) const {
+		nextRoundNo = 0;
+		roundCount = 0;
+		errMsg = "当前玩法暂不支持洗牌";
+		return false;
 	}
 
 	void getAvatarInfo(AvatarInfo& info, const GameAvatar::Ptr& avatar) {
@@ -1181,6 +1193,43 @@ namespace NiuMa
 		calcDistances(avatar->getSeat(), distance);
 	}
 
+	void GameRoom::onShuffleCards(const NetMessage::Ptr& netMsg) {
+		MsgShuffleCards* inst = dynamic_cast<MsgShuffleCards*>(netMsg->getMessage().get());
+		if (inst == nullptr)
+			return;
+
+		MsgShuffleCardsResp resp;
+		resp.playerId = inst->getPlayerId();
+		GameAvatar::Ptr avatar = getAvatar(resp.playerId);
+		resp.seat = avatar ? avatar->getSeat() : -1;
+
+		int nextRoundNo = 0;
+		int roundCount = 0;
+		std::string errMsg;
+		if (!canShuffleCardsBeforeNextRound(resp.playerId, nextRoundNo, roundCount, errMsg)) {
+			resp.errMsg = errMsg.empty() ? "当前不能洗牌" : errMsg;
+			resp.send(netMsg->getSession());
+			return;
+		}
+
+		std::ostringstream remark;
+		remark << "下局开始前洗牌 | 场地:" << getId() << " | 局号:" << nextRoundNo;
+		if (roundCount > 0)
+			remark << "/" << roundCount;
+		if (!handleShuffleCardsBeforeNextRound(resp.playerId, nextRoundNo,
+			"SHUFFLE_FEE", remark.str(), errMsg)) {
+			resp.roundNo = nextRoundNo;
+			resp.errMsg = errMsg.empty() ? "洗牌失败" : errMsg;
+			resp.send(netMsg->getSession());
+			return;
+		}
+
+		resp.roundNo = nextRoundNo;
+		resp.fee = 1;
+		resp.totalFee = getShuffleFeeAmount(resp.playerId);
+		sendMessageToAll(resp);
+	}
+
 	void GameRoom::onDistancesRequest(const NetMessage::Ptr& netMsg) {
 		MsgGetDistancesResp msg;
 		getDistances(msg.distances);
@@ -1296,7 +1345,11 @@ namespace NiuMa
 		sendMessageToAll(msg, inst->getPlayerId(), true);
 	}
 
-	void GameRoom::clean() {}
+	void GameRoom::clean() {
+		_shuffleRoundPlayers.clear();
+		_shuffleFeeAmounts.clear();
+		_roomFeeSettled = false;
+	}
 
 	void GameRoom::initScoreboard(const std::string& playerId) {
 		std::stringstream ss;
@@ -1355,6 +1408,135 @@ namespace NiuMa
 		if (_roomFeeSettled || roomFee <= 0)
 			return;
 
+		int64_t roomFeeTotal = 0;
+		std::vector<std::string> roomFeePlayerIds;
+		std::vector<int64_t> roomFeeAmounts;
+		calcRoomFeeSettlementData(roomFee, netWins, roomFeeTotal, roomFeePlayerIds, roomFeeAmounts, winThreshold);
+		if (roomFeePlayerIds.empty())
+			return;
+
+		std::vector<std::string> commissionPlayers;
+		for (const auto& item : netWins) {
+			const std::string& playerId = item.first;
+			if (playerId.empty())
+				continue;
+			GameAvatar::Ptr avatar = getAvatar(playerId);
+			if (!avatar || avatar->isRobot())
+				continue;
+			bool exists = false;
+			for (const std::string& id : commissionPlayers) {
+				if (id == playerId) {
+					exists = true;
+					break;
+				}
+			}
+			if (!exists)
+				commissionPlayers.push_back(playerId);
+		}
+
+		_roomFeeSettled = true;
+		for (size_t i = 0; i < roomFeePlayerIds.size(); i++) {
+			const int64_t amount = roomFeeAmounts[i];
+			if (amount <= 0)
+				continue;
+			InfoS << "发布整场房费扣除事件，场地Id: " << getId()
+				<< ", 玩家Id: " << roomFeePlayerIds[i]
+				<< ", 房费: " << amount
+				<< ", 总房费: " << roomFeeTotal;
+			if (commissionPlayers.size() == 2) {
+				std::vector<int64_t> commissionAmounts;
+				int64_t baseAmount = amount / 2;
+				int64_t remainder = amount % 2;
+				for (size_t j = 0; j < commissionPlayers.size(); j++) {
+					int64_t shareAmount = baseAmount;
+					if (remainder > 0) {
+						shareAmount++;
+						remainder--;
+					}
+					commissionAmounts.push_back(shareAmount);
+				}
+				WalletEventTask::publishWithCommission(roomFeePlayerIds[i], "ROOM_FEE", amount,
+					bizType, getId(), remark, commissionPlayers, commissionAmounts);
+			}
+			else {
+				WalletEventTask::publish(roomFeePlayerIds[i], "ROOM_FEE", amount, bizType, getId(), remark);
+			}
+		}
+	}
+
+	bool GameRoom::handleShuffleCardsBeforeNextRound(const std::string& playerId,
+		int nextRoundNo,
+		const std::string& bizType,
+		const std::string& remark,
+		std::string& errMsg,
+		int64_t fee) {
+		if (playerId.empty()) {
+			errMsg = "玩家不存在";
+			return false;
+		}
+		if (nextRoundNo <= 1) {
+			errMsg = "首局开始前不能洗牌";
+			return false;
+		}
+		if (fee <= 0) {
+			errMsg = "洗牌扣分配置错误";
+			return false;
+		}
+		GameAvatar::Ptr avatar = getAvatar(playerId);
+		if (!avatar || avatar->isRobot()) {
+			errMsg = "只有房间内真实玩家可以洗牌";
+			return false;
+		}
+		std::unordered_set<std::string>& players = _shuffleRoundPlayers[nextRoundNo];
+		if (players.find(playerId) != players.end()) {
+			errMsg = "本局开始前你已经洗过牌";
+			return false;
+		}
+
+		players.insert(playerId);
+		_shuffleFeeAmounts[playerId] += fee;
+		InfoS << "发布洗牌扣分事件，场地Id: " << getId()
+			<< ", 玩家Id: " << playerId
+			<< ", 局号: " << nextRoundNo
+			<< ", 扣分: " << fee;
+		WalletEventTask::publish(playerId, "SHUFFLE_FEE", fee, bizType, getId(), remark);
+		return true;
+	}
+
+	void GameRoom::getShuffleFeeSettlementData(int64_t& shuffleFeeTotal,
+		std::vector<std::string>& shuffleFeePlayerIds,
+		std::vector<int64_t>& shuffleFeeAmounts) const {
+		shuffleFeeTotal = 0;
+		shuffleFeePlayerIds.clear();
+		shuffleFeeAmounts.clear();
+		for (const auto& item : _shuffleFeeAmounts) {
+			if (item.first.empty() || item.second <= 0)
+				continue;
+			shuffleFeePlayerIds.push_back(item.first);
+			shuffleFeeAmounts.push_back(item.second);
+			shuffleFeeTotal += item.second;
+		}
+	}
+
+	int64_t GameRoom::getShuffleFeeAmount(const std::string& playerId) const {
+		std::unordered_map<std::string, int64_t>::const_iterator it = _shuffleFeeAmounts.find(playerId);
+		if (it == _shuffleFeeAmounts.end())
+			return 0;
+		return it->second;
+	}
+
+	void GameRoom::calcRoomFeeSettlementData(int64_t roomFee,
+		const std::vector<std::pair<std::string, int64_t>>& netWins,
+		int64_t& roomFeeTotal,
+		std::vector<std::string>& roomFeePlayerIds,
+		std::vector<int64_t>& roomFeeAmounts,
+		int64_t winThreshold) const {
+		roomFeeTotal = 0;
+		roomFeePlayerIds.clear();
+		roomFeeAmounts.clear();
+		if (roomFee <= 0)
+			return;
+
 		std::vector<std::pair<std::string, int64_t>> players;
 		std::vector<std::pair<std::string, int64_t>> winners;
 		for (const auto& item : netWins) {
@@ -1373,7 +1555,6 @@ namespace NiuMa
 		if (payers.empty())
 			return;
 
-		_roomFeeSettled = true;
 		const int64_t baseAmount = roomFee / static_cast<int64_t>(payers.size());
 		int64_t remainder = roomFee % static_cast<int64_t>(payers.size());
 		for (const auto& item : payers) {
@@ -1384,12 +1565,9 @@ namespace NiuMa
 			}
 			if (amount <= 0)
 				continue;
-			InfoS << "发布整场房费扣除事件，场地Id: " << getId()
-				<< ", 玩家Id: " << item.first
-				<< ", 房费: " << amount
-				<< ", 整场净赢: " << item.second
-				<< ", 总房费: " << roomFee;
-			WalletEventTask::publish(item.first, "ROOM_FEE", amount, bizType, getId(), remark);
+			roomFeePlayerIds.push_back(item.first);
+			roomFeeAmounts.push_back(amount);
+			roomFeeTotal += amount;
 		}
 	}
 }

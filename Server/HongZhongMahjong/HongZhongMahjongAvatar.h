@@ -34,7 +34,7 @@ namespace NiuMa
 		int _loseScores[4];
 
 		/**
-		 * 一局结算之后玩家赢得(或输)的金币数量
+		 * 一局结算之后玩家赢得(或输)的积分数量
 		 */
 			double _winGold;
 

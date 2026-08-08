@@ -197,7 +197,18 @@ namespace NiuMa
 		// 结算数据
 		MahjongSettlement data;
 
-		MSGPACK_DEFINE_MAP(kick, golds, winGolds, yingZhuang, data);
+		int roundNo;
+		int roundCount;
+		int64_t roomFeeTotal;
+		std::vector<std::string> roomFeePlayerIds;
+		std::vector<int64_t> roomFeeAmounts;
+		int64_t shuffleFeeTotal;
+		std::vector<std::string> shuffleFeePlayerIds;
+		std::vector<int64_t> shuffleFeeAmounts;
+
+		MSGPACK_DEFINE_MAP(kick, golds, winGolds, yingZhuang, data, roundNo, roundCount,
+			roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
+			shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
 	};
 
 	/**

@@ -32,9 +32,9 @@ namespace NiuMa
 		, _level(level)
 		, _roundState(StageState::NotStarted)
 		, _disbandState(StageState::NotStarted)
-		, _roundNo(0)
-		, _backupBanker(0)
-		, _disbander(0)
+			, _roundNo(0)
+			, _backupBanker(0)
+			, _disbander(0)
 			, _disbandTick(0)
 			, _diZhu(1)
 			, _maxScore(0)
@@ -66,6 +66,7 @@ namespace NiuMa
 			for (int i = 0; i < 4; i++) {
 				_disbandChoices[i] = 0;
 				_kicks[i] = false;
+				_gangScores[i] = 0;
 				_totalWinGolds[i] = 0;
 			}
 
@@ -95,12 +96,12 @@ namespace NiuMa
 			_diZhu = root["base_score"].asInt();
 		if (root.isMember("max_score") && root["max_score"].isInt())
 			_maxScore = root["max_score"].asInt();
-			if (root.isMember("room_fee") && root["room_fee"].isInt64())
-				_roomFee = root["room_fee"].asInt64();
-			else if (root.isMember("room_fee") && root["room_fee"].isInt())
-				_roomFee = root["room_fee"].asInt();
-			else if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
-				_roomFee = root["room_fee_type"].asInt();
+		if (root.isMember("room_fee") && root["room_fee"].isInt64())
+			_roomFee = root["room_fee"].asInt64();
+		else if (root.isMember("room_fee") && root["room_fee"].isInt())
+			_roomFee = root["room_fee"].asInt();
+		else if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
+			_roomFee = root["room_fee_type"].asInt();
 		if (root.isMember("round_count") && root["round_count"].isInt())
 			_roundCount = root["round_count"].asInt();
 		if (root.isMember("allow_chi") && root["allow_chi"].isBool())
@@ -178,10 +179,37 @@ namespace NiuMa
 
 	void HongZhongMahjongRoom::clean() {
 		MahjongRoom::clean();
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < 4; i++) {
 			_kicks[i] = false;
+			_gangScores[i] = 0;
+		}
 		_birdTileId = MahjongTile::INVALID_ID;
 		_birdMultiplier = 1;
+	}
+
+	bool HongZhongMahjongRoom::canShuffleCardsBeforeNextRound(const std::string& playerId,
+		int& nextRoundNo,
+		int& roundCount,
+		std::string& errMsg) const {
+		nextRoundNo = _roundNo + 1;
+		roundCount = _roundCount;
+		if (!hasAvatar(playerId)) {
+			errMsg = "你不在当前房间内";
+			return false;
+		}
+		if (_roundNo <= 0) {
+			errMsg = "首局开始前不能洗牌";
+			return false;
+		}
+		if (_roundCount > 0 && _roundNo >= _roundCount) {
+			errMsg = "全部对局已结束，不能洗牌";
+			return false;
+		}
+		if (_roundState != StageState::NotStarted) {
+			errMsg = "下局开始前才能洗牌";
+			return false;
+		}
+		return true;
 	}
 
 	bool HongZhongMahjongRoom::onMessage(const NetMessage::Ptr& netMsg) {
@@ -578,10 +606,27 @@ namespace NiuMa
 		return !hasHongZhongInHand(avatar);
 	}
 
+	bool HongZhongMahjongRoom::canHuWithIncomingTile(MahjongAvatar* avatar, const MahjongTile& mt) const {
+		if (avatar == nullptr)
+			return false;
+		if (!HongZhongMahjongRule::isHongZhong(mt))
+			return avatar->canHu(mt);
+
+		HongZhongMahjongAvatar* hzAvatar = dynamic_cast<HongZhongMahjongAvatar*>(avatar);
+		if (hzAvatar == nullptr)
+			return false;
+		MahjongTileArray tiles = hzAvatar->getTiles();
+		tiles.push_back(mt);
+		std::sort(tiles.begin(), tiles.end());
+		return HongZhongMahjongRule::analyzeHu(tiles, hzAvatar->getChapters(), 1).hu;
+	}
+
 	bool HongZhongMahjongRoom::canCreateDianPaoOption(MahjongAvatar* avatar, const MahjongTile& mt, std::string& passed) const {
 		if (avatar == nullptr)
 			return false;
-		return canDianPao() && avatar->canHu(mt) && avatar->canDianPao(mt, passed) && shouldAllowDianPaoForAvatar(avatar, mt);
+		if (!canDianPao() || !avatar->canDianPao(mt, passed) || !shouldAllowDianPaoForAvatar(avatar, mt))
+			return false;
+		return canHuWithIncomingTile(avatar, mt);
 	}
 
 	bool HongZhongMahjongRoom::executeGang() {
@@ -617,13 +662,13 @@ namespace NiuMa
 				currentAvatar->setPlayedTileAction(mt.getId(), MahjongAction::Type::ZhiGang, acOp.getPlayer());
 		}
 		else if (acOp.getType() == MahjongAction::Type::JiaGang) {
-			for (int i = 0; i < getMaxPlayerNums(); i++) {
-				if (i == acOp.getPlayer())
-					continue;
-				MahjongAvatar* other = dynamic_cast<MahjongAvatar*>(getAvatar(i).get());
-				if (other != nullptr && other->canHu(mt))
-					qiangGangSeats.push_back(i);
-			}
+				for (int i = 0; i < getMaxPlayerNums(); i++) {
+					if (i == acOp.getPlayer())
+						continue;
+					MahjongAvatar* other = dynamic_cast<MahjongAvatar*>(getAvatar(i).get());
+					if (canHuWithIncomingTile(other, mt))
+						qiangGangSeats.push_back(i);
+				}
 			if (!avatar->doJiaGang(mt, static_cast<int>(_actions.size()))) {
 				ss << "逻辑错误，牌桌(Id: " << getId() << ")玩家(Id: " << avatar->getPlayerId() << ")加杠失败!";
 				LOG_ERROR(ss.str());
@@ -658,12 +703,12 @@ namespace NiuMa
 		_actions.push_back(ma);
 
 		if (!qiangGangSeats.empty()) {
-			notifyActionOptionsWaiting(avatar);
-			for (int seat : qiangGangSeats) {
-				MahjongAvatar* other = dynamic_cast<MahjongAvatar*>(getAvatar(seat).get());
-				if (other == nullptr || !other->canHu(mt))
-					continue;
-				int actionId = _acOpIdAlloc.askForId();
+				notifyActionOptionsWaiting(avatar);
+				for (int seat : qiangGangSeats) {
+					MahjongAvatar* other = dynamic_cast<MahjongAvatar*>(getAvatar(seat).get());
+					if (!canHuWithIncomingTile(other, mt))
+						continue;
+					int actionId = _acOpIdAlloc.askForId();
 				if (actionId >= ACTION_OPTION_POOL_SIZE) {
 					LOG_ERROR("逻辑错误，动作id大于动作选项池大小");
 					return false;
@@ -780,6 +825,8 @@ namespace NiuMa
 				continue;
 			gangAvatar->addLoseScore(i, -score);
 			other->addLoseScore(gangSeat, score);
+			_gangScores[gangSeat] += score;
+			_gangScores[i] -= score;
 		}
 	}
 
@@ -891,6 +938,30 @@ namespace NiuMa
 			if (avatar1 != NULL)
 				avatar1->setScore(scores[i]);
 		}
+
+		// 结算前按本局实际应赔积分补足押金，避免扎鸟等倍数把应赔额放大后被初始押金截断。
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			GameAvatar::Ptr ptr = getAvatar(i);
+			avatar1 = dynamic_cast<HongZhongMahjongAvatar*>(ptr.get());
+			if (avatar1 == NULL)
+				continue;
+
+			avatar1->getLoseScores(loseScores);
+			double requiredCapital = static_cast<double>(avatar1->getCashPledge());
+			double owed = 0.0;
+			for (int j = 0; j < 4; j++) {
+				if (i != j && loseScores[j] > 0)
+					owed += _diZhu * loseScores[j];
+			}
+			if (owed > requiredCapital) {
+				int64_t pledgeNeed = static_cast<int64_t>(std::ceil(owed));
+				if (!deductCashPledge(ptr, pledgeNeed, false)) {
+					InfoS << "红中麻将结算押金不足，玩家=" << avatar1->getPlayerId()
+						<< "，需要=" << pledgeNeed << "，当前押金=" << avatar1->getCashPledge();
+				}
+			}
+		}
+
 		// DebtLiquidation清算
 		bool test = false;
 		double diZhu = _diZhu;
@@ -992,12 +1063,14 @@ namespace NiuMa
 			avatar = dynamic_cast<HongZhongMahjongAvatar*>(ptr.get());
 			if (avatar == NULL)
 				continue;
-				delta = avatar->getWinGold();
-				delta = floor(delta + 0.5);
-				avatar->setWinGold(delta);
-				msg.winGolds[i] = static_cast<int>(delta);
-				_totalWinGolds[i] += msg.winGolds[i];
-				cashPledge = avatar->getCashPledge();
+			msg.gangScores[i] = _gangScores[i] * _diZhu;
+			msg.huScores[i] = (avatar->getScore() - _gangScores[i]) * _diZhu;
+			delta = avatar->getWinGold();
+			delta = floor(delta + 0.5);
+			avatar->setWinGold(delta);
+			msg.winGolds[i] = static_cast<int>(delta);
+			_totalWinGolds[i] += msg.winGolds[i];
+			cashPledge = avatar->getCashPledge();
 			cashPledge += msg.winGolds[i];
 			test = true;
 			if (msg.winGolds[i] != 0) {
@@ -1014,6 +1087,19 @@ namespace NiuMa
 				msg.golds[i] = task->getGold() + avatar->getCashPledge();
 			if (!test)
 				_kicks[i] = true;
+		}
+		if (allRoundsFinished) {
+			std::vector<std::pair<std::string, int64_t>> netWins;
+			for (int i = 0; i < getMaxPlayerNums(); i++) {
+				avatar = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(i).get());
+				if (avatar == NULL)
+					continue;
+				netWins.emplace_back(avatar->getPlayerId(), _totalWinGolds[i]);
+			}
+			calcRoomFeeSettlementData(_roomFee, netWins,
+				msg.roomFeeTotal, msg.roomFeePlayerIds, msg.roomFeeAmounts);
+			getShuffleFeeSettlementData(msg.shuffleFeeTotal,
+				msg.shuffleFeePlayerIds, msg.shuffleFeeAmounts);
 		}
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			avatar = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(i).get());
@@ -1119,6 +1205,24 @@ namespace NiuMa
 	void HongZhongMahjongRoom::disbandRoom() {
 		_disbandState = StageState::Finished;
 
+		if (_roundNo > 0) {
+			MsgHZSettlement settlement;
+			settlement.kick = false;
+			std::vector<std::pair<std::string, int64_t>> netWins;
+			for (int i = 0; i < getMaxPlayerNums(); i++) {
+				HongZhongMahjongAvatar* avatar = dynamic_cast<HongZhongMahjongAvatar*>(getAvatar(i).get());
+				if (avatar == NULL)
+					continue;
+				settlement.winGolds[i] = static_cast<int>(_totalWinGolds[i]);
+				netWins.emplace_back(avatar->getPlayerId(), _totalWinGolds[i]);
+			}
+			calcRoomFeeSettlementData(_roomFee, netWins,
+				settlement.roomFeeTotal, settlement.roomFeePlayerIds, settlement.roomFeeAmounts);
+			getShuffleFeeSettlementData(settlement.shuffleFeeTotal,
+				settlement.shuffleFeePlayerIds, settlement.shuffleFeeAmounts);
+			sendMessageToAll(settlement);
+		}
+
 		MsgDisband msg;
 		sendMessageToAll(msg);
 
@@ -1157,6 +1261,8 @@ namespace NiuMa
 			task->_scores[i] = avatar->getScore();
 			task->_winGolds[i] = static_cast<int>(avatar->getWinGold());
 			data.winGolds[i] = task->_winGolds[i];
+			data.gangScores[i] = _gangScores[i] * _diZhu;
+			data.huScores[i] = (avatar->getScore() - _gangScores[i]) * _diZhu;
 		}
 		// 生成随机种子hash（合规随机算法审计）
 		task->_randomSeedHash = ReplayUtils::generateSeedHash(getId(), _roundNo, _backupBanker);

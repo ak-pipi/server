@@ -379,6 +379,31 @@ namespace NiuMa
 		}
 	}
 
+	bool GuanDanRoom::canShuffleCardsBeforeNextRound(const std::string& playerId,
+		int& nextRoundNo,
+		int& roundCount,
+		std::string& errMsg) const {
+		nextRoundNo = _roundNo + 1;
+		roundCount = _roundLimit;
+		if (!hasAvatar(playerId)) {
+			errMsg = "你不在当前房间内";
+			return false;
+		}
+		if (_roundNo <= 0) {
+			errMsg = "首局开始前不能洗牌";
+			return false;
+		}
+		if (_roundLimit > 0 && _roundNo >= _roundLimit) {
+			errMsg = "全部对局已结束，不能洗牌";
+			return false;
+		}
+		if (_gameState != GameState::Waiting || _operation != WaitOperation::None) {
+			errMsg = "下局开始前才能洗牌";
+			return false;
+		}
+		return true;
+	}
+
 	int GuanDanRoom::getDistrictId() const {
 		if (_level == static_cast<int>(GuanDanRoomLevel::Beginner))
 			return 5;
@@ -2019,12 +2044,25 @@ namespace NiuMa
 		for (int i = 0; i < 4; i++) {
 			msg.finishedSeats[i] = _finishedSeats[i];
 			msg.kicks[i] = _kicks[i];
-		}
-		msg.gradePointNext = _gradePointNext;
-		sendMessageToAll(msg);
-		if (_roundLimit > 0 && _roundNo >= _roundLimit) {
-			publishFinalRoomFee();
-			gameOver();
+			}
+			msg.gradePointNext = _gradePointNext;
+			if (_roundLimit > 0 && _roundNo >= _roundLimit) {
+				std::vector<std::pair<std::string, int64_t>> netWins;
+				for (int i = 0; i < 4; i++) {
+					GameAvatar::Ptr avatar = getAvatar(i);
+					if (!avatar)
+						continue;
+					netWins.emplace_back(avatar->getPlayerId(), _totalNetWins[i]);
+				}
+				calcRoomFeeSettlementData(_roomFee, netWins,
+					msg.roomFeeTotal, msg.roomFeePlayerIds, msg.roomFeeAmounts);
+				getShuffleFeeSettlementData(msg.shuffleFeeTotal,
+					msg.shuffleFeePlayerIds, msg.shuffleFeeAmounts);
+			}
+			sendMessageToAll(msg);
+			if (_roundLimit > 0 && _roundNo >= _roundLimit) {
+				publishFinalRoomFee();
+				gameOver();
 			return;
 		}
 		for (int i = 0; i < 4; i++) {

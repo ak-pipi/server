@@ -19,6 +19,8 @@ namespace NiuMa
 	const std::string MsgPlayerDiamonds::TYPE("MsgPlayerDiamonds");
 	const std::string MsgPlayerReady::TYPE("MsgPlayerReady");
 	const std::string MsgPlayerReadyResp::TYPE("MsgPlayerReadyResp");
+	const std::string MsgShuffleCards::TYPE("MsgShuffleCards");
+	const std::string MsgShuffleCardsResp::TYPE("MsgShuffleCardsResp");
 
 	MsgJoinGame::MsgJoinGame()
 		: seat(-1)
@@ -35,6 +37,13 @@ namespace NiuMa
 
 	MsgPlayerReadyResp::MsgPlayerReadyResp()
 		: seat(-1)
+	{}
+
+	MsgShuffleCardsResp::MsgShuffleCardsResp()
+		: seat(-1)
+		, roundNo(0)
+		, fee(0)
+		, totalFee(0)
 	{}
 
 	const std::string MsgPlayerAuthorize::TYPE("MsgPlayerAuthorize");
@@ -138,6 +147,8 @@ namespace NiuMa
 		MessageManager::getSingleton().registCreator(MsgGetSpectators::TYPE, creator);
 		creator = IMsgCreator::Ptr(new MsgCreator<MsgPlayerReady>());
 		MessageManager::getSingleton().registCreator(MsgPlayerReady::TYPE, creator);
+		creator = IMsgCreator::Ptr(new MsgCreator<MsgShuffleCards>());
+		MessageManager::getSingleton().registCreator(MsgShuffleCards::TYPE, creator);
 		creator = IMsgCreator::Ptr(new MsgCreator<MsgPlayerAuthorize>());
 		MessageManager::getSingleton().registCreator(MsgPlayerAuthorize::TYPE, creator);
 		creator = IMsgCreator::Ptr(new MsgCreator<MsgPlayerGeolocation>());

@@ -58,6 +58,10 @@ namespace NiuMa
 		 * 重写摸牌/吃/碰后出杠：桃江麻将需听牌才能开杠
 		 */
 		virtual void afterFetchChiPeng(MahjongAvatar* pAvatar, int fetchedId = -1) override;
+		virtual bool canShuffleCardsBeforeNextRound(const std::string& playerId,
+			int& nextRoundNo,
+			int& roundCount,
+			std::string& errMsg) const override;
 
 	private:
 		/**

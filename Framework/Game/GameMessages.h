@@ -417,6 +417,52 @@ namespace NiuMa
 	};
 
 	/**
+	 * 玩家请求下局开始前洗牌
+	 * 客户端->服务器
+	 */
+	class MsgShuffleCards : public MsgVenueInner {
+	public:
+		MsgShuffleCards() {}
+		virtual ~MsgShuffleCards() {}
+
+		static const std::string TYPE;
+
+		virtual const std::string& getType() const {
+			return TYPE;
+		}
+
+		MSGPACK_DEFINE_MAP(playerId, timestamp, nonce, signature, venueId);
+	};
+
+	/**
+	 * 响应玩家洗牌消息
+	 * 服务器->客户端
+	 */
+	class MsgShuffleCardsResp : public MsgBase {
+	public:
+		MsgShuffleCardsResp();
+		virtual ~MsgShuffleCardsResp() {}
+
+		static const std::string TYPE;
+
+		virtual const std::string& getType() const {
+			return TYPE;
+		}
+
+		MSG_PACK_IMPL
+
+	public:
+		std::string playerId;
+		int seat;
+		int roundNo;
+		int64_t fee;
+		int64_t totalFee;
+		std::string errMsg;
+
+		MSGPACK_DEFINE_MAP(playerId, seat, roundNo, fee, totalFee, errMsg);
+	};
+
+	/**
 	 * 玩家请求托管(由系统自动出牌)消息
 	 * 客户端->服务器
 	 */

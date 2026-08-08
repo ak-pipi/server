@@ -89,10 +89,36 @@ namespace NiuMa
 	}
 
 	void YuanJiangQianFenRoom::clean() {
+		GameRoom::clean();
 		_gameState = GameState::None;
 		_roundNo = 0; _roundCount = 0;
 		for (int i = 0; i < 4; i++) { _totalScores[i] = 0; _roundScores[i] = 0; }
 		_playbackData = QianFenPlaybackData();
+	}
+
+	bool YuanJiangQianFenRoom::canShuffleCardsBeforeNextRound(const std::string& playerId,
+		int& nextRoundNo,
+		int& roundCount,
+		std::string& errMsg) const {
+		nextRoundNo = _roundNo + 1;
+		roundCount = _roundLimit;
+		if (!hasAvatar(playerId)) {
+			errMsg = "你不在当前房间内";
+			return false;
+		}
+		if (_roundNo <= 0) {
+			errMsg = "首局开始前不能洗牌";
+			return false;
+		}
+		if (_roundLimit > 0 && _roundCount >= _roundLimit) {
+			errMsg = "全部对局已结束，不能洗牌";
+			return false;
+		}
+		if (_gameState != GameState::Ready && _gameState != GameState::None) {
+			errMsg = "下局开始前才能洗牌";
+			return false;
+		}
+		return true;
 	}
 
 	void YuanJiangQianFenRoom::onTimer() {}
@@ -439,11 +465,24 @@ namespace NiuMa
 			auto _av = GameRoom::getAvatar(_si);
 			if (_av) {
 				msg->totalScores[_si] = _totalScores[_si];
-				msg->totalGolds[_si] = _totalScores[_si] * _level;
-				msg->playerIds[_si] = _av->getPlayerId();
+					msg->totalGolds[_si] = _totalScores[_si] * _level;
+					msg->playerIds[_si] = _av->getPlayerId();
+				}
 			}
-		}
-		sendMessageToAll(*msg);
+			{
+				std::vector<std::pair<std::string, int64_t>> netWins;
+				for (int _si = 0; _si < 4; _si++) {
+					auto _av = GameRoom::getAvatar(_si);
+					if (!_av)
+						continue;
+					netWins.emplace_back(_av->getPlayerId(), static_cast<int64_t>(_totalScores[_si]) * _level);
+				}
+				calcRoomFeeSettlementData(_roomFee, netWins,
+					msg->roomFeeTotal, msg->roomFeePlayerIds, msg->roomFeeAmounts);
+				getShuffleFeeSettlementData(msg->shuffleFeeTotal,
+					msg->shuffleFeePlayerIds, msg->shuffleFeeAmounts);
+			}
+			sendMessageToAll(*msg);
 		// MQ
 			for (int _si = 0; _si < 4; _si++) {
 				auto _av = GameRoom::getAvatar(_si);
@@ -464,6 +503,6 @@ namespace NiuMa
 					continue;
 				netWins.emplace_back(_av->getPlayerId(), static_cast<int64_t>(_totalScores[_si]) * _level);
 			}
-			publishRoomFeeOnGameOver(_roomFee, netWins, "YuanJiangQianFen", "沅江千分整场房费");
+				publishRoomFeeOnGameOver(_roomFee, netWins, "YuanJiangQianFen", "沅江千分整场房费");
+			}
 		}
-	}

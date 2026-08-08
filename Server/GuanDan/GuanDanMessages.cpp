@@ -166,6 +166,8 @@ namespace NiuMa
 	const std::string MsgGuanDanResult::TYPE("MsgGuanDanResult");
 	MsgGuanDanResult::MsgGuanDanResult()
 		: gradePointNext(2)
+		, roomFeeTotal(0)
+		, shuffleFeeTotal(0)
 	{
 		for (int i = 0; i < 4; i++) {
 			finishedSeats[i] = -1;

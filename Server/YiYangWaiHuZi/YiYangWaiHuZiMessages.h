@@ -143,11 +143,19 @@ namespace NiuMa
 		MSG_PACK_IMPL
 	public:
 		int huSeat;
-		int huXi;
-		int scores[3];
-		double winGolds[3];
-		MSGPACK_DEFINE_MAP(huSeat, huXi, scores, winGolds);
-	};
+			int huXi;
+			int scores[3];
+			double winGolds[3];
+			int64_t roomFeeTotal;
+			std::vector<std::string> roomFeePlayerIds;
+			std::vector<int64_t> roomFeeAmounts;
+			int64_t shuffleFeeTotal;
+			std::vector<std::string> shuffleFeePlayerIds;
+			std::vector<int64_t> shuffleFeeAmounts;
+			MSGPACK_DEFINE_MAP(huSeat, huXi, scores, winGolds,
+				roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
+				shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
+		};
 }
 
 #endif // _NIU_MA_YIYANG_WAIHUZI_MESSAGES_H_

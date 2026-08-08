@@ -25,6 +25,10 @@ namespace NiuMa
 		virtual int checkLeave(const std::string& playerId, std::string& errMsg) const override;
 		virtual void onAvatarLeaved(int seat, const std::string& playerId) override;
 		virtual void clean() override;
+		virtual bool canShuffleCardsBeforeNextRound(const std::string& playerId,
+			int& nextRoundNo,
+			int& roundCount,
+			std::string& errMsg) const override;
 
 	public:
 		virtual void onTimer() override;

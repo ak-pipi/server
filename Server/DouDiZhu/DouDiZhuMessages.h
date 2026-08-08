@@ -201,12 +201,20 @@ namespace NiuMa
 		int landlordSeat;
 		int scores[2];
 		int64_t winGolds[2];
-		std::vector<int> remainCards[2];
-		int multiplier;
-		bool spring;
+			std::vector<int> remainCards[2];
+			int multiplier;
+			bool spring;
+			int64_t roomFeeTotal;
+			std::vector<std::string> roomFeePlayerIds;
+			std::vector<int64_t> roomFeeAmounts;
+			int64_t shuffleFeeTotal;
+			std::vector<std::string> shuffleFeePlayerIds;
+			std::vector<int64_t> shuffleFeeAmounts;
 
-		MSGPACK_DEFINE_MAP(winnerSeat, landlordSeat, scores, winGolds, remainCards, multiplier, spring);
-	};
+			MSGPACK_DEFINE_MAP(winnerSeat, landlordSeat, scores, winGolds, remainCards, multiplier, spring,
+				roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
+				shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
+		};
 
 	class MsgDouDiZhuDisbandVote : public MsgBase {
 	public:

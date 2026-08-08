@@ -43,6 +43,10 @@ namespace NiuMa
 		virtual void doJieSuan() override;
 		virtual void afterHu() override;
 		virtual void dealTiles() override;
+		virtual bool canShuffleCardsBeforeNextRound(const std::string& playerId,
+			int& nextRoundNo,
+			int& roundCount,
+			std::string& errMsg) const override;
 
 	private:
 		void parseRuleConfig(const std::string& ruleConfig);
