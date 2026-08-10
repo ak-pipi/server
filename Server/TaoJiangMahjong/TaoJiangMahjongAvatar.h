@@ -21,7 +21,7 @@ namespace NiuMa
 		bool detectHuStyle(bool bZiMo, const MahjongTile& mt, bool huTileAsWildcard);
 
 		/**
-		 * 重写直杠检测：桃江麻将没有听牌时不能直杠。
+		 * 重写直杠检测：桃江麻将没有听牌时不能直杠；报听后以报听时锁定的听口为准。
 		 * 绝对规则：吃、碰、杠动作中的赖子只能按本身牌面使用，不能作为万能牌。
 		 */
 		virtual bool canZhiGang(const MahjongTile& mt) const override;
@@ -47,9 +47,10 @@ namespace NiuMa
 		virtual bool canDianPao(const MahjongTile& mt, std::string& passed) const override;
 
 		/**
-		 * 报听后只能打出本轮摸到的牌，不能换听
+		 * 报听或开杠后只能打出本轮摸到的牌，不能换手牌
 		 */
 		virtual bool playTile(int id) override;
+		virtual int autoPlayTile() const override;
 
 		/**
 		 * 重写吃/碰执行：保留桃江麻将开杠、报听限制；
@@ -60,7 +61,7 @@ namespace NiuMa
 
 	public:
 		/**
-		 * 设置开杠后标志（开杠后不能吃碰杠）
+		 * 设置开杠后标志（开杠后不能吃碰，只能摸什么打什么；仍可在听口不变时继续杠）
 		 */
 		void setAfterGang(bool v);
 		bool isAfterGang() const;
@@ -80,6 +81,7 @@ namespace NiuMa
 		 */
 		void setMingZi(const MahjongTile::Tile& tile);
 		const MahjongTile::Tile& getMingZi() const;
+		bool canMingZiDiHu(const MahjongTile& mt) const;
 
 	/**
 		 * 设置是否已报听
@@ -137,7 +139,7 @@ namespace NiuMa
 		MahjongGenre::TingPaiArray _baoTingTiles;
 
 		/**
-		 * 开杠后标志，true=不能吃碰杠（只能摸什么打什么）
+		 * 开杠后标志，true=不能吃碰且只能摸什么打什么
 		 */
 		bool _afterGang;
 

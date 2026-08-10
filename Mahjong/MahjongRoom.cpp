@@ -568,6 +568,10 @@ bool MahjongRoom::canCreateDianPaoOption(MahjongAvatar* pAvatar, const MahjongTi
 	return canDianPao() && pAvatar->canHu(mt) && pAvatar->canDianPao(mt, passed) && shouldAllowDianPaoForAvatar(pAvatar, mt);
 }
 
+bool MahjongRoom::canCreateZhiGangOption(MahjongAvatar* pAvatar, const MahjongTile& mt) const {
+	return pAvatar != nullptr && pAvatar->canZhiGang(mt);
+}
+
 	bool MahjongRoom::executeHu() {
 		if (_acOps2[0].empty())
 			return false;
@@ -1058,7 +1062,7 @@ bool MahjongRoom::canCreateDianPaoOption(MahjongAvatar* pAvatar, const MahjongTi
 			}
 			else if (!passed.empty())
 				notifyPassTip(pAvatar, 1, passed);
-			if (pAvatar->canZhiGang(mt)) {
+			if (canCreateZhiGangOption(pAvatar, mt)) {
 				tmp = _acOpIdAlloc.askForId();
 				if (tmp >= ACTION_OPTION_POOL_SIZE) {
 					LOG_ERROR("逻辑错误，动作id大于动作选项池大小");

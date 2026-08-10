@@ -231,7 +231,6 @@ namespace NiuMa
 		int64_t gold = avatar->getCashPledge();
 		int64_t diamod = 0LL;
 		if (task->getSucceed() && task->getRows() > 0) {
-			gold += task->getGold();
 			diamod = task->getDiamond();
 		}
 		Json::Value tmp(Json::objectValue);
@@ -906,7 +905,6 @@ namespace NiuMa
 		// 纳税(抽水)比例，固定为1%
 		const double rate = 0.01;
 		int64_t winGold = 0;
-		int64_t goldNeed = getCashPledge();
 		int64_t diamond = 0;
 		int64_t diamondNeed = 0;
 		int64_t cashPledge = 0LL;
@@ -937,17 +935,14 @@ namespace NiuMa
 				avatar1->setWinGold(winGold);
 				cashPledge = avatar1->getCashPledge();
 				cashPledge += winGold;
-				if (cashPledge < goldNeed) {
-					// 押金不足，尝试从玩家金币中扣除
-					test = deductCashPledge(ptr);
-				}
-				else {
-					// 将当前押金数额保存到数据库
-					updateCashPledge(avatar1->getPlayerId(), cashPledge);
-				}
+				if (cashPledge < 0)
+					cashPledge = 0;
+				test = updateCashPledge(avatar1->getPlayerId(), cashPledge);
+				if (test)
+					avatar1->setCashPledge(cashPledge);
 			}
-			if (!test) {
-				// 玩家剩余金币已经低于房间最低限制，踢出
+			if (!test || avatar1->getCashPledge() <= 0) {
+				// 玩家房间积分已不足，踢出
 				_kicks[i] = true;
 			}
 			else if (avatar1->getOfflines() > 2) {
@@ -1029,7 +1024,6 @@ namespace NiuMa
 		BiJiSettlement settlement;
 		BiJiAvatar* avatar = nullptr;
 		unsigned int nums = 0;
-		std::shared_ptr<GetCapitalTask> task;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			avatar = dynamic_cast<BiJiAvatar*>(getAvatar(i).get());
 			if (avatar == nullptr || !avatar->isJoinRound())
@@ -1040,10 +1034,6 @@ namespace NiuMa
 			settlement.totalScore = avatar->getTotal();
 			settlement.winGold = avatar->getWinGold();
 			settlement.gold = avatar->getCashPledge();
-			task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
-			MysqlPool::getSingleton().syncQuery(task);
-			if (task->getSucceed() && task->getRows() > 0)
-				settlement.gold += task->getGold();
 			settlement.qiPai = avatar->isGiveUp();
 			if (!settlement.qiPai) {
 				settlement.rewardType = avatar->getRewardType();

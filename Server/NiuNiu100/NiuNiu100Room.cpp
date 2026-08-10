@@ -325,9 +325,11 @@ namespace NiuMa
 				}
 				cashPledge = avatar->getCashPledge();
 				cashPledge += scoreTotal;
-				avatar->setCashPledge(cashPledge);
+				if (cashPledge < 0)
+					cashPledge = 0;
 				// 将当前押金数额保存到数据库
-				updateCashPledge(avatar->getPlayerId(), cashPledge);
+				if (updateCashPledge(avatar->getPlayerId(), cashPledge))
+					avatar->setCashPledge(cashPledge);
 			}
 			++it;
 		}
@@ -430,7 +432,7 @@ namespace NiuMa
 				for (int j = 0; j < 4; j++)
 					msg.rankScores6[j] = avatar->getScore(j);
 			}
-			msg.rankGolds[i] = avatar->getGold() + avatar->getCashPledge();
+			msg.rankGolds[i] = avatar->getCashPledge();
 		}
 		for (int i = 0; i < 5; i++)
 			msg.genres[i] = _genres[i];
@@ -443,7 +445,7 @@ namespace NiuMa
 					++it;
 					continue;
 				}
-				msg.gold = avatar->getCashPledge() + avatar->getGold();
+				msg.gold = avatar->getCashPledge();
 				for (int i = 0; i < 4; i++)
 					msg.scores[i] = avatar->getScore(i);
 				msg.send(avatar->getSession());
@@ -455,7 +457,7 @@ namespace NiuMa
 			avatar = dynamic_cast<NiuNiu100Avatar*>(getAvatar(playerId).get());
 			if (avatar == nullptr)
 				return;
-			msg.gold = avatar->getCashPledge() + avatar->getGold();
+			msg.gold = avatar->getCashPledge();
 			for (int i = 0; i < 4; i++)
 				msg.scores[i] = avatar->getScore(i);
 			msg.send(avatar->getSession());
@@ -474,7 +476,7 @@ namespace NiuMa
 		msg.gameState = static_cast<int>(_gameState);
 		msg.bankerId = _bankerId;
 		msg.deposit = _deposit;
-		msg.gold = avatar->getGold() + avatar->getCashPledge();
+		msg.gold = avatar->getCashPledge();
 		for (int i = 0; i < 4; i++) {
 			msg.betTotals[i] = _betTotals[i];
 			msg.myBetAmounts[i] = avatar->getBetAmount(i);
@@ -549,12 +551,10 @@ namespace NiuMa
 			int64_t cashPledge = avatar->getCashPledge();
 			int64_t goldNeed = CHIP_AMOUNTS[chip] + avatar->getBetAmount();
 			goldNeed *= 4;
-			bool test = true;
 			if (cashPledge < goldNeed) {
-				// 当前押金数量不足，尝试从玩家金币中补充扣除
-				test = deductCashPledge(ptr, goldNeed, false);
+				msg.errMsg = "下注金额超出所能赔付，携带金币不能小于下注金额4倍";
 			}
-			if (test) {
+			else {
 				goldNeed = CHIP_AMOUNTS[chip];
 				for (int i = 0; i < 4; i++)
 					goldNeed += _betTotals[i];
@@ -562,8 +562,6 @@ namespace NiuMa
 				if (_deposit < goldNeed)
 					msg.errMsg = "总下注金额超出庄家所能赔付";
 			}
-			else
-				msg.errMsg = "下注金额超出所能赔付，携带金币不能小于下注金额4倍";
 		}
 		if (msg.errMsg.empty()) {
 			_chipNums[zone][chip] += 1;
@@ -586,6 +584,7 @@ namespace NiuMa
 
 	void NiuNiu100Room::sendSettlement() {
 		MsgNiu100Settlement msg;
+		std::vector<std::string> bankruptIds;
 		for (int i = 0; i < 4; i++)
 			msg.bankerScore += _bankerScores[i];
 		bool test = false;
@@ -647,7 +646,14 @@ namespace NiuMa
 			}
 			msg.score = avatar->getScore();
 			msg.send(avatar->getSession());
+			if (avatar->getCashPledge() <= 0)
+				bankruptIds.push_back(avatar->getPlayerId());
 			++it;
+		}
+		for (const std::string& playerId : bankruptIds) {
+			GameAvatar::Ptr ptr = getAvatar(playerId);
+			if (ptr)
+				kickAvatar(ptr);
 		}
 	}
 
@@ -744,7 +750,7 @@ namespace NiuMa
 			if (avatar == nullptr)
 				continue;
 			msg.rankIds[i] = _rankIds[i];
-			msg.golds[i] = avatar->getGold() + avatar->getCashPledge();
+			msg.golds[i] = avatar->getCashPledge();
 			msg.names[i] = avatar->getNickname();
 			msg.headImgUrls[i] = avatar->getHeadUrl();
 		}
@@ -784,7 +790,7 @@ namespace NiuMa
 				item.playerId = _rank[i];
 				item.nickname = avatar->getNickname();
 				item.headImgUrl = avatar->getHeadUrl();
-				item.gold = avatar->getGold() + avatar->getCashPledge();
+				item.gold = avatar->getCashPledge();
 				item.accWins20 = avatar->getAccWins20();
 				item.accBets20 = avatar->getAccBets20();
 			}
@@ -821,7 +827,7 @@ namespace NiuMa
 				item.playerId = it->first;
 				item.accWins20 = avatar->getAccWins20();
 				item.accBets20 = avatar->getAccBets20();
-				item.gold = avatar->getGold() + avatar->getCashPledge();
+				item.gold = avatar->getCashPledge();
 				item.nickname = avatar->getNickname();
 				item.headImgUrl = avatar->getHeadUrl();
 				msg.items.push_back(item);

@@ -49,6 +49,7 @@ namespace NiuMa
 
 	MsgTJSettlement::MsgTJSettlement()
 		: kick(false)
+		, roomFinished(false)
 		, roundNo(0)
 		, roundCount(0)
 		, roomFeeTotal(0)

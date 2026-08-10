@@ -11,13 +11,13 @@
 #include "TaoJiangMahjongPlayback.h"
 #include "TaoJiangMahjongRecordTask.h"
 #include "Game/GameMessages.h"
-#include "Game/DebtLiquidation.h"
 #include "Game/ReplayUtils.h"
 #include "Player/PlayerManager.h"
 #include "Constant/RedisKeys.h"
 #include "Redis/RedisPool.h"
 #include "jsoncpp/include/json/json.h"
 
+#include <algorithm>
 #include <sstream>
 #include <cmath>
 #include <map>
@@ -307,6 +307,17 @@ namespace NiuMa
 			if (canWinKeZiNatural(tiles))
 				return true;
 			if (allSameSuit(tiles) && canWinNatural(tiles, false))
+				return true;
+			return false;
+		}
+
+		bool canHardZhuangNaturallyWithoutWildcards(const MahjongTileArray& handTiles,
+			const MahjongChapterArray& chapters) {
+			if (canWinNatural(handTiles, true))
+				return true;
+			if (chapters.empty() && canWinQiXiaoDuiNatural(handTiles))
+				return true;
+			if (chaptersAreNaturalKeZiOnly(chapters) && canWinKeZiNatural(handTiles))
 				return true;
 			return false;
 		}
@@ -1285,7 +1296,7 @@ namespace NiuMa
 		if (!ruleConfig.empty())
 			parseRuleConfig(ruleConfig);
 
-		// 押金数额为底注的8倍
+		// 桃江最低携带积分与大厅入口一致，真实可输额度由玩家本次携带积分决定。
 		setCashPledge(_diZhu * 8);
 	}
 
@@ -1425,6 +1436,13 @@ bool TaoJiangMahjongRoom::canCreateDianPaoOption(MahjongAvatar* pAvatar, const M
 	return shouldAllowDianPaoForAvatar(pAvatar, mt, huTileAsWildcard);
 }
 
+bool TaoJiangMahjongRoom::canCreateZhiGangOption(MahjongAvatar* pAvatar, const MahjongTile& mt) const {
+	TaoJiangMahjongAvatar* tjAvatar = dynamic_cast<TaoJiangMahjongAvatar*>(pAvatar);
+	return tjAvatar != nullptr
+		&& tjAvatar->canZhiGang(mt)
+		&& shouldKeepTingForGang(tjAvatar, mt, MahjongAction::Type::ZhiGang);
+}
+
 void TaoJiangMahjongRoom::dealTiles() {
 		// 洗牌和确定赖子已在 startRound() 中完成
 
@@ -1490,6 +1508,9 @@ void TaoJiangMahjongRoom::dealTiles() {
 			MahjongTileArray tingBaseTiles;
 			pAvatar->getTilesNoFetched(tingBaseTiles);
 			_rule->checkTingPai(tingBaseTiles, pAvatar->getGangTiles(), pAvatar->getTingTiles(), pAvatar);
+			TaoJiangMahjongAvatar* tjAvatar = dynamic_cast<TaoJiangMahjongAvatar*>(pAvatar);
+			if (tjAvatar != nullptr && tjAvatar->isBaoTinged())
+				pAvatar->getTingTiles() = tjAvatar->getBaoTingTiles();
 
 			bool canHu = canHuWithCandidate(pAvatar, mt, true);
 
@@ -1605,14 +1626,19 @@ void TaoJiangMahjongRoom::dealTiles() {
 					else if (laiZiCount >= 3)
 						avatar->addHuWay(MahjongGenre::HuWay::TianHu);
 
-					int mingZiCount = countMingZiInHand(avatar);
-					if (mingZiCount >= 3)
+					if (avatar->canMingZiDiHu(huTile))
 						avatar->addHuWay(MahjongGenre::HuWay::DiHu);
 				}
 			}
 
 			if (isHeiTianHu(avatar)) {
-				avatar->addHuStyle(MahjongGenre::HuStyle::HeiTianHu);
+				int oldStyle = 0;
+				int oldStyleEx = 0;
+				int oldWay = 0;
+				bool oldYingZhuang = false;
+				avatar->getHuCalcState(oldStyle, oldStyleEx, oldWay, oldYingZhuang);
+				avatar->restoreHuCalcState(static_cast<int>(MahjongGenre::HuStyle::HeiTianHu),
+					oldStyleEx, oldWay, oldYingZhuang);
 				InfoS << "黑天胡检测成功, 座位=" << i;
 			}
 		}
@@ -1760,12 +1786,11 @@ void TaoJiangMahjongRoom::dealTiles() {
 	}
 
 	void TaoJiangMahjongRoom::getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const {
-		std::shared_ptr<GetCapitalTask> task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
-		MysqlPool::getSingleton().syncQuery(task);
 		int64_t gold = avatar->getCashPledge();
 		int64_t diamond = 0LL;
+		std::shared_ptr<GetCapitalTask> task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
+		MysqlPool::getSingleton().syncQuery(task);
 		if (task->getSucceed() && task->getRows() > 0) {
-			gold += task->getGold();
 			diamond = task->getDiamond();
 		}
 		Json::Value tmp(Json::objectValue);
@@ -1877,10 +1902,10 @@ void TaoJiangMahjongRoom::dealTiles() {
 			ErrorS << "查询玩家资产失败，场地Id: " << getId() << ", 玩家Id: " << inst->getPlayerId();
 			return;
 		}
-		MsgTJSyncResp msg;
-		msg.number = _number;
-		msg.gold = task->getGold();
-		msg.diamond = task->getDiamond();
+			MsgTJSyncResp msg;
+			msg.number = _number;
+			msg.gold = avatar->getCashPledge();
+			msg.diamond = task->getDiamond();
 		msg.diZhu = _diZhu;
 		msg.chi = _allowChi;
 		msg.dianPao = _allowDianPao;
@@ -2086,7 +2111,6 @@ void TaoJiangMahjongRoom::dealTiles() {
 			return;
 		int score = 0;
 		int scores[4] = { 0, 0, 0, 0 };
-		double diZhu = _diZhu;
 		TaoJiangMahjongAvatar* avatar1 = nullptr;
 		TaoJiangMahjongAvatar* avatar2 = nullptr;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
@@ -2096,9 +2120,11 @@ void TaoJiangMahjongRoom::dealTiles() {
 			// 算胡分
 			if (avatar1->isHu()) {
 				int daHuCount = avatar1->getDaHuCount();
-				score = calcBaseHuScore(daHuCount, avatar1->isZiMo(), avatar1->isYingZhuang());
+				bool zimo = avatar1->isZiMo();
+				bool dianPao = !zimo && avatar1->isDianPao();
+				score = calcBaseHuScore(daHuCount, zimo, avatar1->isYingZhuang());
 
-				if (avatar1->isDianPao()) {
+				if (dianPao) {
 					// 点炮：放炮者一人承担（门子x1）
 					if (_waitingQiangGang) {
 						MahjongTile huTile;
@@ -2148,106 +2174,60 @@ void TaoJiangMahjongRoom::dealTiles() {
 				avatar1->setScore(scores[i]);
 		}
 
-		// 结算前按本局实际应赔金额补足押金，避免 5 分局初始押金 250 截断 480 等正常结算。
-		for (int i = 0; i < getMaxPlayerNums(); i++) {
-			GameAvatar::Ptr ptr = getAvatar(i);
-			avatar1 = dynamic_cast<TaoJiangMahjongAvatar*>(ptr.get());
-			if (avatar1 == NULL)
-				continue;
+		int64_t desiredGolds[4] = { 0LL, 0LL, 0LL, 0LL };
+		int64_t actualGolds[4] = { 0LL, 0LL, 0LL, 0LL };
+		int64_t totalDesiredWin = 0LL;
+		int64_t totalPaid = 0LL;
 
-			avatar1->getLoseScores(loseScores);
-			double requiredCapital = static_cast<double>(avatar1->getCashPledge());
-			double owed = 0.0;
-			for (int j = 0; j < 4; j++) {
-				if (i != j && loseScores[j] > 0)
-					owed += diZhu * loseScores[j];
-			}
-			if (owed > requiredCapital) {
-				int64_t pledgeNeed = static_cast<int64_t>(std::ceil(owed));
-				if (!deductCashPledge(ptr, pledgeNeed, false)) {
-					InfoS << "桃江麻将结算押金不足，玩家=" << avatar1->getPlayerId()
-						<< "，需要=" << pledgeNeed << "，当前押金=" << avatar1->getCashPledge();
-				}
-			}
-		}
-
-		// 使用DebtLiquidation清算多边债务
-		bool test = false;
-		double capital = 0.0f;
-		DebtNode* node = NULL;
-		std::unordered_map<int, DebtNode*> debtNet;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			avatar1 = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
 			if (avatar1 == NULL)
 				continue;
-			test = false;
-			avatar1->getLoseScores(loseScores);
-			for (int j = 0; j < 4; j++) {
-				if ((i == j) || (loseScores[j] == 0))
-					continue;
-				test = true;
-				break;
-			}
-			if (!test)
+
+			desiredGolds[i] = static_cast<int64_t>(scores[i]) * static_cast<int64_t>(_diZhu);
+		}
+
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			avatar1 = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
+			if (avatar1 == NULL)
 				continue;
-			capital = static_cast<double>(avatar1->getCashPledge());
-			node = new DebtNode(i, capital);
-			debtNet.insert(std::make_pair(i, node));
+
+			if (desiredGolds[i] < 0) {
+				int64_t loss = -desiredGolds[i];
+				int64_t cashPledge = std::max<int64_t>(0LL, avatar1->getCashPledge());
+				if (loss > cashPledge)
+					loss = cashPledge;
+				actualGolds[i] = -loss;
+				totalPaid += loss;
+			} else if (desiredGolds[i] > 0)
+				totalDesiredWin += desiredGolds[i];
 		}
-		std::unordered_map<int, DebtNode*>::const_iterator it1 = debtNet.begin();
-		std::unordered_map<int, DebtNode*>::const_iterator it2;
-		while (it1 != debtNet.end()) {
-			node = it1->second;
-			avatar1 = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(it1->first).get());
-			avatar1->getLoseScores(loseScores);
-			for (int j = 0; j < 4; j++) {
-				if (((it1->first) == j) || (loseScores[j] == 0))
+
+		int64_t distributed = 0LL;
+		int lastWinner = -1;
+		if (totalDesiredWin > 0LL) {
+			for (int i = 0; i < getMaxPlayerNums(); i++) {
+				if (desiredGolds[i] <= 0)
 					continue;
-				it2 = debtNet.find(j);
-				if (it2 != debtNet.end())
-					node->tally((it2->second), diZhu * loseScores[j]);
+				lastWinner = i;
+				actualGolds[i] = desiredGolds[i] * totalPaid / totalDesiredWin;
+				distributed += actualGolds[i];
 			}
-			++it1;
+			if (lastWinner >= 0)
+				actualGolds[lastWinner] += (totalPaid - distributed);
 		}
-		std::string logDebt;
-		DebtLiquidation dl;
-		dl.printDebtNet(debtNet, logDebt);
-		if (!dl(debtNet)) {
-			dl.releaseDebtNet(debtNet);
-			ErrorS << "清算结果不正确，原始债务网：" << logDebt;
-			return;
+
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			avatar1 = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
+			if (avatar1 != NULL)
+				avatar1->setWinGold(static_cast<double>(actualGolds[i]));
 		}
-		test = false;
-		it1 = debtNet.begin();
-		while (it1 != debtNet.end()) {
-			node = it1->second;
-			if (node->getCapital() < 0.0) {
-				test = true;
-				break;
-			}
-			++it1;
-		}
-		if (test) {
-			dl.releaseDebtNet(debtNet);
-			ErrorS << "清算之后存在负数结果，原始债务网：" << logDebt;
-			return;
-		}
-		double winGold = 0.0;
-		it1 = debtNet.begin();
-		while (it1 != debtNet.end()) {
-			avatar1 = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(it1->first).get());
-			node = it1->second;
-			capital = node->getCapital();
-			winGold = capital - static_cast<double>(avatar1->getCashPledge());
-			avatar1->setWinGold(winGold);
-			++it1;
-		}
-		dl.releaseDebtNet(debtNet);
 	}
 
 	void TaoJiangMahjongRoom::doJieSuan() {
 		_roundState = StageState::NotStarted;
-		const bool allRoundsFinished = (_roundCount > 0 && _roundNo >= _roundCount);
+		const bool roundCountFinished = (_roundCount > 0 && _roundNo >= _roundCount);
+		bool finalSettlement = roundCountFinished;
 
 		MsgTJSettlement msg;
 		msg.roundNo = _roundNo;
@@ -2261,43 +2241,41 @@ void TaoJiangMahjongRoom::dealTiles() {
 		}
 
 		double delta = 0.0;
-		int64_t tmp = 0LL;
 		int64_t cashPledge = 0LL;
-		int64_t goldNeed = getCashPledge();
 		bool test = true;
 		GameAvatar::Ptr ptr;
 		TaoJiangMahjongAvatar* avatar = NULL;
-		std::shared_ptr<GetCapitalTask> task;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			ptr = getAvatar(i);
 			avatar = dynamic_cast<TaoJiangMahjongAvatar*>(ptr.get());
 			if (avatar == NULL)
 				continue;
 			delta = avatar->getWinGold();
-				// 四舍五入
-				delta = floor(delta + 0.5);
-				avatar->setWinGold(delta);
-				msg.winGolds[i] = static_cast<int>(delta);
-				_totalWinGolds[i] += msg.winGolds[i];
-				cashPledge = avatar->getCashPledge();
+			// 四舍五入
+			delta = floor(delta + 0.5);
+			avatar->setWinGold(delta);
+			msg.winGolds[i] = static_cast<int>(delta);
+			_totalWinGolds[i] += msg.winGolds[i];
+			cashPledge = avatar->getCashPledge();
 			cashPledge += msg.winGolds[i];
 			test = true;
-			if (msg.winGolds[i] != 0) {
-				if (cashPledge < goldNeed) {
-					test = deductCashPledge(ptr);
-				}
-				else {
-					updateCashPledge(avatar->getPlayerId(), cashPledge);
-				}
+			if (cashPledge < 0)
+				cashPledge = 0;
+			if (cashPledge != avatar->getCashPledge()) {
+				test = updateCashPledge(avatar->getPlayerId(), cashPledge);
+				if (test)
+					avatar->setCashPledge(cashPledge);
 			}
-			task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
-			MysqlPool::getSingleton().syncQuery(task);
-			if (task->getSucceed() && task->getRows() > 0)
-				msg.golds[i] = task->getGold() + avatar->getCashPledge();
+			msg.golds[i] = avatar->getCashPledge();
+			if (test && avatar->getCashPledge() <= 0) {
+				_kicks[i] = true;
+				finalSettlement = true;
+			}
 			if (!test)
 				_kicks[i] = true;
 		}
-		if (allRoundsFinished) {
+		msg.roomFinished = finalSettlement;
+		if (finalSettlement) {
 			std::vector<std::pair<std::string, int64_t>> netWins;
 			for (int i = 0; i < getMaxPlayerNums(); i++) {
 				avatar = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
@@ -2314,27 +2292,34 @@ void TaoJiangMahjongRoom::dealTiles() {
 			avatar = dynamic_cast<TaoJiangMahjongAvatar*>(getAvatar(i).get());
 			if (avatar == NULL)
 				continue;
-			msg.kick = _kicks[i] && !allRoundsFinished;
+			msg.kick = _kicks[i];
 			msg.send(avatar->getSession());
 		}
 	}
 
 	void TaoJiangMahjongRoom::afterHu() {
 		saveRoundRecord();
-		const bool allRoundsFinished = (_roundCount > 0 && _roundNo >= _roundCount);
+		bool finalSettlement = (_roundCount > 0 && _roundNo >= _roundCount);
+		for (int i = 0; i < getMaxPlayerNums(); i++) {
+			if (_kicks[i]) {
+				finalSettlement = true;
+				break;
+			}
+		}
 
 		GameAvatar::Ptr avatar;
 			for (int i = 0; i < getMaxPlayerNums(); i++) {
 				avatar = getAvatar(i);
 				if (!avatar)
 					continue;
-				if (_kicks[i] && !allRoundsFinished)
+				if (_kicks[i] && !finalSettlement)
 					kickAvatar(avatar);
 				else
 					avatar->setReady(false);
 			}
-			if (allRoundsFinished) {
+			if (finalSettlement) {
 				publishFinalRoomFee();
+				kickAllAvatars();
 				gameOver();
 			}
 		}
@@ -2417,6 +2402,7 @@ void TaoJiangMahjongRoom::dealTiles() {
 		if (_roundNo > 0) {
 			MsgTJSettlement settlement;
 			settlement.kick = false;
+			settlement.roomFinished = true;
 			settlement.roundNo = _roundNo;
 			settlement.roundCount = _roundCount;
 			std::vector<std::pair<std::string, int64_t>> netWins;
@@ -2605,7 +2591,7 @@ void TaoJiangMahjongRoom::dealTiles() {
 		std::sort(handTiles.begin(), handTiles.end(), [](const MahjongTile& a, const MahjongTile& b) {
 			return a.getTile() < b.getTile();
 		});
-		if (!canHuNaturallyWithoutWildcards(handTiles))
+		if (!canHardZhuangNaturallyWithoutWildcards(handTiles, chapters))
 			return false;
 
 		unsigned int style = static_cast<unsigned int>(avatar->getHuStyle());
@@ -2697,7 +2683,10 @@ void TaoJiangMahjongRoom::dealTiles() {
 		if (avatar == nullptr || !mt.getTile().isValid())
 			return false;
 
-		bool cachedCanHu = huTileAsWildcard ? avatar->canHu(mt) : false;
+		TaoJiangMahjongAvatar* tjAvatar = dynamic_cast<TaoJiangMahjongAvatar*>(avatar);
+		bool cachedCanHu = (huTileAsWildcard || (tjAvatar != nullptr && tjAvatar->isBaoTinged())) ? avatar->canHu(mt) : false;
+		if (tjAvatar != nullptr && tjAvatar->isBaoTinged())
+			return cachedCanHu;
 		TaoJiangMahjongRule* tjRule = dynamic_cast<TaoJiangMahjongRule*>(_rule.get());
 		if (tjRule == nullptr)
 			return cachedCanHu;
@@ -2765,10 +2754,9 @@ void TaoJiangMahjongRoom::dealTiles() {
 			return false;
 
 		const MahjongGenre::TingPaiArray& beforeTing = avatar->isBaoTinged() ? avatar->getBaoTingTiles() : avatar->getTingTiles();
-		if (beforeTing.empty())
+		bool mustKeepSameTing = avatar->isBaoTinged() || avatar->isAfterGang();
+		if (mustKeepSameTing && beforeTing.empty())
 			return false;
-		if (!avatar->isBaoTinged() && !avatar->isAfterGang())
-			return true;
 
 		int removeCount = 0;
 		if (gangType == MahjongAction::Type::JiaGang)
@@ -2798,11 +2786,17 @@ void TaoJiangMahjongRoom::dealTiles() {
 		gangTiles.push_back(gangTile.getTile());
 		MahjongGenre::TingPaiArray afterTing;
 		_rule->checkTingPai(testTiles, gangTiles, afterTing, avatar);
-		return sameTingTiles(beforeTing, afterTing);
+		if (afterTing.empty())
+			return false;
+		if (mustKeepSameTing)
+			return sameTingTiles(beforeTing, afterTing);
+		return true;
 	}
 
-	bool TaoJiangMahjongRoom::addQiangGangOptions(MahjongAvatar* gangPlayer, const MahjongTileArray& candidateTiles) {
-		if (gangPlayer == nullptr || candidateTiles.empty())
+	bool TaoJiangMahjongRoom::addQiangGangOptions(MahjongAvatar* gangPlayer,
+		const MahjongTileArray& gangTileCandidates,
+		const MahjongTileArray& revealedCandidates) {
+		if (gangPlayer == nullptr || (gangTileCandidates.empty() && revealedCandidates.empty()))
 			return false;
 
 		bool hasQiangGang = false;
@@ -2813,18 +2807,21 @@ void TaoJiangMahjongRoom::dealTiles() {
 			if (opponent == nullptr)
 				continue;
 
-			for (const MahjongTile& candidateTile : candidateTiles) {
+			std::set<MahjongTile::Tile> addedTiles;
+			auto addOption = [&](const MahjongTile& candidateTile) {
+				if (!candidateTile.getTile().isValid())
+					return;
+				if (!addedTiles.insert(candidateTile.getTile()).second)
+					return;
 				if (!canHuWithCandidate(opponent, candidateTile, false))
-					continue;
-				if (!shouldAllowDianPaoForAvatar(opponent, candidateTile))
-					continue;
+					return;
 
 				hasQiangGang = true;
 				_waitingQiangGang = true;
 				int id = _acOpIdAlloc.askForId();
 				if (id >= ACTION_OPTION_POOL_SIZE) {
 					LOG_ERROR("逻辑错误，动作id大于动作选项池大小");
-					continue;
+					return;
 				}
 				_acOpPool[id].setType(MahjongAction::Type::DianPao);
 				_acOpPool[id].setId(id);
@@ -2833,7 +2830,11 @@ void TaoJiangMahjongRoom::dealTiles() {
 				_acOps1[0].push_back(id);
 				opponent->addActionOption(id);
 				notifyActionOptions(opponent);
-			}
+			};
+			for (const MahjongTile& candidateTile : gangTileCandidates)
+				addOption(candidateTile);
+			for (const MahjongTile& candidateTile : revealedCandidates)
+				addOption(candidateTile);
 		}
 		return hasQiangGang;
 	}
@@ -2858,23 +2859,25 @@ void TaoJiangMahjongRoom::dealTiles() {
 		if (pAvatar == nullptr)
 			return;
 
-		if (fetchedId < 0) {
-			_rule->checkTingPai(pAvatar->getTiles(), pAvatar->getGangTiles(), pAvatar->getTingTiles(), pAvatar);
-			notifyTingTile(pAvatar);
-		}
-
-		// 桃江麻将规则：没有听牌时不能开杠
-		const MahjongGenre::TingPaiArray& tingTiles = pAvatar->getTingTiles();
-		bool hasTing = !tingTiles.empty();
 		TaoJiangMahjongAvatar* tjAvatar = dynamic_cast<TaoJiangMahjongAvatar*>(pAvatar);
+		if (fetchedId >= 0) {
+			MahjongTileArray tingBaseTiles;
+			pAvatar->getTilesNoFetched(tingBaseTiles);
+			_rule->checkTingPai(tingBaseTiles, pAvatar->getGangTiles(), pAvatar->getTingTiles(), pAvatar);
+		} else {
+			_rule->checkTingPai(pAvatar->getTiles(), pAvatar->getGangTiles(), pAvatar->getTingTiles(), pAvatar);
+		}
+		if (tjAvatar != nullptr && tjAvatar->isBaoTinged())
+			pAvatar->getTingTiles() = tjAvatar->getBaoTingTiles();
+		notifyTingTile(pAvatar);
 
 		std::vector<int> lstTileIds;
 		std::vector<int>::const_iterator it;
 		int id = 0;
 		MahjongTile gangTile;
 
-		// 加杠：需要听牌才能加杠（开杠后仍可继续加杠，只要听牌不变）
-		if (hasTing && pAvatar->canJiaGang(lstTileIds)) {
+		// 加杠：杠后仍听即可；报听后还必须保持报听听口不变。
+		if (pAvatar->canJiaGang(lstTileIds)) {
 			it = lstTileIds.begin();
 			while (it != lstTileIds.end()) {
 				if (_delayJiaGang || (*it == fetchedId)) {
@@ -2899,8 +2902,8 @@ void TaoJiangMahjongRoom::dealTiles() {
 			}
 		}
 
-		// 暗杠：需要听牌才能暗杠（开杠后仍可继续暗杠，只要听牌不变）
-		if (hasTing && pAvatar->canAnGang(lstTileIds)) {
+		// 暗杠：杠后仍听即可；报听后还必须保持报听听口不变。
+		if (pAvatar->canAnGang(lstTileIds)) {
 			it = lstTileIds.begin();
 			while (it != lstTileIds.end()) {
 				gangTile.setId(*it);
@@ -2924,7 +2927,6 @@ void TaoJiangMahjongRoom::dealTiles() {
 		}
 
 		if (pAvatar->hasActionOption()) {
-			// 有杠等选项 → 同时也添加出牌选项，通知客户端并进入等待动作选项状态
 			id = _acOpIdAlloc.askForId();
 			if (id >= ACTION_OPTION_POOL_SIZE) {
 				LOG_ERROR("逻辑错误，动作id大于动作选项池大小");
@@ -2938,7 +2940,6 @@ void TaoJiangMahjongRoom::dealTiles() {
 			notifyActionOptions(pAvatar);
 			changeState(StateMachine::Action);
 		} else {
-			// 通知玩家出牌
 			id = _acOpIdAlloc.askForId();
 			if (id >= ACTION_OPTION_POOL_SIZE) {
 				LOG_ERROR("逻辑错误，动作id大于动作选项池大小");
@@ -2949,7 +2950,6 @@ void TaoJiangMahjongRoom::dealTiles() {
 			_acOpPool[id].setPlayer(_actor);
 			pAvatar->addActionOption(id);
 
-			// 进入等待出牌状态
 			changeState(StateMachine::Play);
 			notifyActionOptions(pAvatar);
 		}
@@ -2975,8 +2975,7 @@ void TaoJiangMahjongRoom::dealTiles() {
 			ErrorS << "逻辑错误，牌桌(Id: " << getId() << ")杠牌玩家不存在!";
 			return false;
 		}
-		const MahjongGenre::TingPaiArray& beforeTing = tjAvatar->isBaoTinged() ? tjAvatar->getBaoTingTiles() : tjAvatar->getTingTiles();
-		if (beforeTing.empty()) {
+		if (tjAvatar->isBaoTinged() && tjAvatar->getBaoTingTiles().empty()) {
 			InfoS << "桃江麻将: 未听牌不能开杠, 玩家=" << pAvatar->getPlayerId();
 			return false;
 		}
@@ -3020,6 +3019,8 @@ void TaoJiangMahjongRoom::dealTiles() {
 		}
 		// 更新听牌信息
 		_rule->checkTingPai(pAvatar->getTiles(), pAvatar->getGangTiles(), pAvatar->getTingTiles(), pAvatar);
+		if (tjAvatar->isBaoTinged())
+			pAvatar->getTingTiles() = tjAvatar->getBaoTingTiles();
 		// 清空所有动作选项
 		clearActionOptions();
 		// 通知所有人动作选项结束
@@ -3088,13 +3089,14 @@ void TaoJiangMahjongRoom::dealTiles() {
 			notifyActionOptions(gangPlayer);
 			changeState(StateMachine::Action);
 		} else {
-			MahjongTileArray candidates;
+			MahjongTileArray gangTileCandidates;
+			MahjongTileArray revealedCandidates;
 			if (gangType == MahjongAction::Type::ZhiGang || gangType == MahjongAction::Type::JiaGang)
-				candidates.push_back(gangTile);
+				gangTileCandidates.push_back(gangTile);
 			for (int k = 0; k < _gangRevealedCount; k++)
-				candidates.push_back(_gangRevealedTiles[k]);
+				revealedCandidates.push_back(_gangRevealedTiles[k]);
 
-			if (addQiangGangOptions(gangPlayer, candidates)) {
+			if (addQiangGangOptions(gangPlayer, gangTileCandidates, revealedCandidates)) {
 				// 有对手可以抢杠，进入等待动作选项状态
 				changeState(StateMachine::Action);
 			} else {
@@ -3152,17 +3154,18 @@ void TaoJiangMahjongRoom::dealTiles() {
 		} else if (_gangRevealedCount > 0) {
 			// 开杠者放弃了杠上花，检查对手能否抢杠
 			MahjongAvatar* gangPlayer = dynamic_cast<MahjongAvatar*>(getAvatar(_actor).get());
-			MahjongTileArray candidates;
+			MahjongTileArray gangTileCandidates;
+			MahjongTileArray revealedCandidates;
 			if (_lastGangType == MahjongAction::Type::ZhiGang || _lastGangType == MahjongAction::Type::JiaGang) {
 				MahjongTile gangTile;
 				gangTile.setId(_lastGangTileId);
 				if (_dealer.getTileById(gangTile))
-					candidates.push_back(gangTile);
+					gangTileCandidates.push_back(gangTile);
 			}
 			for (int k = 0; k < _gangRevealedCount; k++)
-				candidates.push_back(_gangRevealedTiles[k]);
+				revealedCandidates.push_back(_gangRevealedTiles[k]);
 
-			if (addQiangGangOptions(gangPlayer, candidates)) {
+			if (addQiangGangOptions(gangPlayer, gangTileCandidates, revealedCandidates)) {
 				changeState(StateMachine::Action);
 			} else {
 				finishGangRevealWithoutHu(gangPlayer);

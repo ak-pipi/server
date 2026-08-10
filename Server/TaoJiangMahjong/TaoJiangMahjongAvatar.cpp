@@ -141,24 +141,8 @@ namespace NiuMa
 		bool bFound = false;
 		const MahjongGenre::TingPaiArray& huTiles = _baoTinged ? _baoTingTiles : _tingTiles;
 		bFound = findHuTile(huTiles, mt, &_huStyle);
-		if (!bFound && _baoTinged)
-			bFound = findHuTile(_tingTiles, mt, &_huStyle);
-		if (!bFound) {
-			if (bZiMo && _mingZi.isValid()) {
-				int mingZiCount = 0;
-				bool candidateInHand = false;
-				for (const MahjongTile& t : _handTiles) {
-					if (t.getTile() == _mingZi)
-						mingZiCount++;
-					if (t.getId() == mt.getId())
-						candidateInHand = true;
-				}
-				if (!candidateInHand && mt.getTile() == _mingZi)
-					mingZiCount++;
-				if (mingZiCount >= 3)
-					bFound = true;
-			}
-		}
+		if (!bFound && bZiMo)
+			bFound = canMingZiDiHu(mt);
 		if (!bFound)
 			return false;
 
@@ -456,14 +440,11 @@ namespace NiuMa
 		// 硬庄不计入大胡数量，结算时作为独立 x2 倍数处理。
 
 		// 地胡：拥有3张明子牌且能正常胡牌，算1个大胡
-		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu)) {
+		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu))
 			daHuCount += 1;
-			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::PingHu)) == static_cast<int>(MahjongGenre::HuStyle::PingHu))
-				daHuCount += 1;
-		}
 
 		int multiplier = 1;
-		int baseMultiplier = isDianPao() ? 2 : 3;
+		int baseMultiplier = isZiMo() ? 3 : 2;
 		if (daHuCount > 0)
 			multiplier = baseMultiplier * daHuCount;
 		if (multiplier > 18)
@@ -508,11 +489,8 @@ namespace NiuMa
 			daHuCount += 1;
 
 		// 地胡算1个大胡
-		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu)) {
+		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu))
 			daHuCount += 1;
-			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::PingHu)) == static_cast<int>(MahjongGenre::HuStyle::PingHu))
-				daHuCount += 1;
-		}
 
 		if (_baoTinged)
 			daHuCount += 1;
@@ -624,10 +602,37 @@ namespace NiuMa
 		return _mingZi;
 	}
 
+	bool TaoJiangMahjongAvatar::canMingZiDiHu(const MahjongTile& mt) const {
+		if (!_mingZi.isValid() || !mt.getTile().isValid())
+			return false;
+		if (_fetchedTileId != mt.getId())
+			return false;
+
+		int mingZiCount = 0;
+		for (const MahjongTile& t : _handTiles) {
+			if (t.getTile() == _mingZi)
+				mingZiCount++;
+		}
+		for (const MahjongChapter& ch : _chapters) {
+			const MahjongTileArray& tiles = ch.getAllTiles();
+			for (const MahjongTile& t : tiles) {
+				if (t.getTile() == _mingZi)
+					mingZiCount++;
+			}
+		}
+		if (mingZiCount < 3)
+			return false;
+
+		int logicalTileCount = static_cast<int>(_handTiles.size())
+			+ static_cast<int>(_chapters.size()) * 3;
+		return logicalTileCount == 14;
+	}
+
 	bool TaoJiangMahjongAvatar::canZhiGang(const MahjongTile& mt) const {
 		// 桃江麻将硬规则：动作牌型只能按真实牌面，赖子不能补杠。
 		// 直杠额外要求已经听牌。
-		if (_tingTiles.empty())
+		const MahjongGenre::TingPaiArray& tingTiles = _baoTinged ? _baoTingTiles : _tingTiles;
+		if (tingTiles.empty())
 			return false;
 		return MahjongAvatar::canZhiGang(mt);
 	}
@@ -684,25 +689,13 @@ namespace NiuMa
 	}
 
 	bool TaoJiangMahjongAvatar::canHu(const MahjongTile& mt) const {
-		if (_mingZi.isValid()) {
-			int count = 0;
-			bool candidateInHand = false;
-			for (const MahjongTile& t : _handTiles) {
-				if (t.getTile() == _mingZi)
-					count++;
-				if (t.getId() == mt.getId())
-					candidateInHand = true;
-			}
-			if (!candidateInHand && mt.getTile() == _mingZi)
-				count++;
-			if (count >= 3)
-				return true;
-		}
+		if (canMingZiDiHu(mt))
+			return true;
 
 		const MahjongGenre::TingPaiArray& huTiles = _baoTinged ? _baoTingTiles : _tingTiles;
 		if (findHuTile(huTiles, mt))
 			return true;
-		return _baoTinged && findHuTile(_tingTiles, mt);
+		return false;
 	}
 
 	bool TaoJiangMahjongAvatar::canDianPao(const MahjongTile& mt, std::string& passed) const {
@@ -717,9 +710,18 @@ namespace NiuMa
 	}
 
 	bool TaoJiangMahjongAvatar::playTile(int id) {
-		if (_baoTinged && id != getFetchedTileId())
+		if ((_baoTinged || _afterGang) && id != getFetchedTileId())
 			return false;
 		return MahjongAvatar::playTile(id);
+	}
+
+	int TaoJiangMahjongAvatar::autoPlayTile() const {
+		if (_baoTinged || _afterGang) {
+			int fetchedId = getFetchedTileId();
+			if (fetchedId != MahjongTile::INVALID_ID)
+				return fetchedId;
+		}
+		return MahjongAvatar::autoPlayTile();
 	}
 
 	bool TaoJiangMahjongAvatar::doChi(const MahjongTile& mt, int id1, int id2, int actionId, int player) {

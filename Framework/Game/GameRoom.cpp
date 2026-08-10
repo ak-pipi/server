@@ -13,12 +13,65 @@
 #include "GetAgencyTask.h"
 #include "Player/PlayerMessages.h"
 #include "WalletEventTask.h"
+#include "jsoncpp/include/json/json.h"
 
 #include <boost/locale.hpp>
+#include <cerrno>
+#include <cstdlib>
+#include <memory>
 #include <sstream>
 
 namespace NiuMa
 {
+		namespace {
+			int64_t readCarryScoreFromBase64(const std::string& base64) {
+				if (base64.empty())
+					return 0LL;
+			std::string json;
+			if (!BaseUtils::decodeBase64(base64, json))
+				return -1LL;
+
+			Json::Value root;
+			Json::CharReaderBuilder builder;
+			std::string errs;
+			std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+			if (!reader->parse(json.data(), json.data() + json.size(), &root, &errs))
+				return -1LL;
+
+			Json::Value value = root["carryScore"];
+			if (value.isNull())
+				value = root["carry_score"];
+			if (value.isNull())
+				return 0LL;
+				if (value.isInt64() || value.isUInt64() || value.isInt() || value.isUInt())
+					return value.asInt64();
+				if (value.isString()) {
+					std::string text = value.asString();
+					if (text.empty())
+						return -1LL;
+					char* end = nullptr;
+					errno = 0;
+					long long score = std::strtoll(text.c_str(), &end, 10);
+					if ((errno != 0) || (end == text.c_str()) || (*end != '\0'))
+						return -1LL;
+					return static_cast<int64_t>(score);
+				}
+				return -1LL;
+			}
+
+			bool addGoldBack(const std::string& playerId, int64_t amount) {
+				if (playerId.empty() || amount <= 0LL)
+					return true;
+				std::stringstream ss;
+				ss << "update `capital` set `gold` = `gold` + " << amount
+					<< ", `version` = `version` + 1 where `player_id` = \""
+					<< playerId << "\"";
+				std::shared_ptr<MysqlCommonTask> task = std::make_shared<MysqlCommonTask>(ss.str(), MysqlQueryTask::QueryType::Update);
+				MysqlPool::getSingleton().syncQuery(task);
+				return task->getSucceed() && task->getAffectedRecords() > 0;
+			}
+		}
+
 	GameRoom::GameRoom(const std::string& id, int gameType, int maxPlayerNums, RoomCategory category)
 		: Venue(id, gameType)
 		, _category(category)
@@ -283,7 +336,7 @@ namespace NiuMa
 		}
 		else {
 			// 加入游戏
-			if (!joinGame(seat, playerId, errMsg))
+			if (!joinGame(seat, playerId, base64, errMsg))
 				return false;
 			// 执行玩家加入后的上层逻辑
 			onAvatarJoined(seat, playerId);
@@ -293,14 +346,27 @@ namespace NiuMa
 		return true;
 	}
 
-	bool GameRoom::joinGame(int seat, const std::string& playerId, std::string& errMsg, bool robot) {
+	bool GameRoom::joinGame(int seat, const std::string& playerId, const std::string& base64, std::string& errMsg, bool robot) {
 		if (!checkJoin(seat, playerId, errMsg))
 			return false;
+		int64_t carryScore = readCarryScoreFromBase64(base64);
+		if (carryScore < 0LL) {
+			errMsg = "携带积分参数错误";
+			return false;
+		}
+		int64_t targetCashPledge = _cashPledge;
+		if (carryScore > 0LL) {
+			if (carryScore < _cashPledge) {
+				errMsg = std::string("携带积分不足，最低需要") + std::to_string(_cashPledge) + std::string("积分");
+				return false;
+			}
+			targetCashPledge = carryScore;
+		}
 		// 当前已经预扣初的押金数量
 		int64_t cashPledge = 0LL;
-		if ((_cashPledge > 0) || (_diamondNeed > 0)) {
+		if ((targetCashPledge > 0) || (_diamondNeed > 0)) {
 			// 检查是否有足够金币预扣押金，以及是否有足够的钻石数量用于扣除
-			if (_cashPledge > 0) {
+			if (targetCashPledge > 0) {
 				// 查询当前已经预扣初的押金数量
 				std::shared_ptr<GetCashPledgeTask> task1 = std::make_shared<GetCashPledgeTask>(playerId, getId());
 				MysqlPool::getSingleton().syncQuery(task1);
@@ -315,7 +381,7 @@ namespace NiuMa
 			int64_t gold = 0LL;
 			int64_t diamond = 0LL;
 			std::shared_ptr<GetCapitalTask> task2;
-			if ((cashPledge < _cashPledge) || (_diamondNeed > 0)) {
+			if ((cashPledge < targetCashPledge) || (_diamondNeed > 0)) {
 				task2 = std::make_shared<GetCapitalTask>(playerId);
 				MysqlPool::getSingleton().syncQuery(task2);
 				if (!task2->getSucceed()) {
@@ -332,12 +398,12 @@ namespace NiuMa
 				errMsg = std::string("钻石不足，最低需要") + std::to_string(_diamondNeed) + std::string("枚钻石");
 				return false;
 			}
-			if (cashPledge < _cashPledge) {
-				int64_t delta = _cashPledge - cashPledge;
-				cashPledge = _cashPledge;
+			if (cashPledge < targetCashPledge) {
+				int64_t delta = targetCashPledge - cashPledge;
+				cashPledge = targetCashPledge;
 				if (gold < delta) {
 					// 金币不足
-					errMsg = std::string("金币不足，最低需要") + std::to_string(_cashPledge) + std::string("金币");
+					errMsg = std::string("金币不足，本次携带需要") + std::to_string(targetCashPledge) + std::string("金币");
 					return false;
 				}
 				// 预扣除押金
@@ -360,10 +426,12 @@ namespace NiuMa
 					return false;
 				}
 				// 添加押金记录
-				if (!updateCashPledge(playerId, _cashPledge)) {
+				if (!updateCashPledge(playerId, targetCashPledge)) {
 					// 更新押金失败
 					errMsg = "数据库错误";
 					ErrorS << "玩家(Id: " << playerId << ")加入游戏(Id: " << getId() << ")：添加或者更新押金失败，应返还金币数量: " << delta;
+					if (!addGoldBack(playerId, delta))
+						ErrorS << "玩家(Id: " << playerId << ")加入游戏(Id: " << getId() << ")：冻结失败后返还金币失败，数量: " << delta;
 					return false;
 				}
 			}
@@ -382,8 +450,8 @@ namespace NiuMa
 			avatar->setSeat(seat);
 			_avatarSeats[seat] = avatar;
 		}
-		if (_cashPledge > 0)
-			avatar->setCashPledge(static_cast<int>(cashPledge));
+		if (targetCashPledge > 0)
+			avatar->setCashPledge(cashPledge);
 		addAvatar(avatar);
 		return true;
 	}
@@ -433,7 +501,7 @@ namespace NiuMa
 		if (!checkEnter(playerId, errMsg, true))
 			return false;
 		// 加入游戏
-		if (!joinGame(seat, playerId, errMsg, true))
+		if (!joinGame(seat, playerId, BaseUtils::EMPTY_STRING, errMsg, true))
 			return false;
 		// 执行玩家加入后的上层逻辑
 		onAvatarJoined(seat, playerId);
@@ -599,12 +667,14 @@ namespace NiuMa
 			return true;
 		// 更新金币数量，循环多次以应对可能的数据库冲突的情况
 		for (int i = 0; i < 10; i++) {
-			std::shared_ptr<GetCapitalTask> task2 = std::make_shared<GetCapitalTask>(playerId);
-			MysqlPool::getSingleton().syncQuery(task2);
-			if (!task2->getSucceed()) {
-				ErrorS << "返还押金失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 应返还金币数量: " << cashPledge;
-				return false;
-			}
+				std::shared_ptr<GetCapitalTask> task2 = std::make_shared<GetCapitalTask>(playerId);
+				MysqlPool::getSingleton().syncQuery(task2);
+				if (!task2->getSucceed()) {
+					ErrorS << "返还押金失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 应返还金币数量: " << cashPledge;
+					if (flag && !updateCashPledge(playerId, cashPledge))
+						ErrorS << "返还押金失败后恢复押金记录失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 押金数量: " << cashPledge;
+					return false;
+				}
 			int64_t gold = 0LL;
 			if (task2->getRows() > 0)
 				gold = task2->getGold();
@@ -616,95 +686,20 @@ namespace NiuMa
 			sql = ss.str();
 			std::shared_ptr<MysqlCommonTask> task3 = std::make_shared<MysqlCommonTask>(sql, MysqlQueryTask::QueryType::Update);
 			MysqlPool::getSingleton().syncQuery(task3);
-			if (!task3->getSucceed()) {
-				ErrorS << "返还押金失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 应返还金币数量: " << cashPledge;
-				return false;
-			}
+				if (!task3->getSucceed()) {
+					ErrorS << "返还押金失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 应返还金币数量: " << cashPledge;
+					if (flag && !updateCashPledge(playerId, cashPledge))
+						ErrorS << "返还押金失败后恢复押金记录失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 押金数量: " << cashPledge;
+					return false;
+				}
 			if (task3->getAffectedRecords() > 0)
 				return true;
-		}
-		ErrorS << "返还押金失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 应返还金币数量: " << cashPledge;
-		return false;
-	}
-
-	bool GameRoom::deductCashPledge(const GameAvatar::Ptr& avatar) const {
-		return deductCashPledge(avatar, _cashPledge, true);
-	}
-
-	bool GameRoom::deductCashPledge(const GameAvatar::Ptr& avatar, int64_t goldNeed, bool kick) const {
-		if (!avatar)
+			}
+			ErrorS << "返还押金失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 应返还金币数量: " << cashPledge;
+			if (flag && !updateCashPledge(playerId, cashPledge))
+				ErrorS << "返还押金失败后恢复押金记录失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 押金数量: " << cashPledge;
 			return false;
-		int64_t cashPledge = avatar->getCashPledge();
-		if (cashPledge >= goldNeed)
-			return true;
-		std::stringstream ss;
-		std::string sql;
-		int64_t delta = goldNeed - cashPledge;
-		// 循环多次以应对可能的数据库冲突的情况
-		for (int i = 0; i < 10; i++) {
-			std::shared_ptr<GetCapitalTask> task1 = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
-			MysqlPool::getSingleton().syncQuery(task1);
-			if (!task1->getSucceed() || (task1->getRows() < 1)) {
-				ErrorS << "扣除押金失败：查询失败，场地Id: " << getId() << ", 玩家Id: "
-					<< avatar->getPlayerId() << ", 当前押金数量: " << cashPledge;
-				return false;
-			}
-			int64_t gold = task1->getGold();
-			bool test = true;
-			if (gold < delta) {
-				if (kick) {
-					// 玩家金币不足够补充扣除，将剩余的全部押金转成玩家金币，之后玩家会被踢出游戏房
-					gold += cashPledge;
-					test = false;
-				}
-				else {
-					// 不将玩家踢出，简单返回补充扣除失败
-					return false;
-				}
-			}
-			else
-				gold -= delta;
-			if (test) {
-				// 更新数据库中的押金数量
-				if (!updateCashPledge(avatar->getPlayerId(), goldNeed)) {
-					ErrorS << "扣除押金失败：更新押金数量失败，场地Id: " << getId() << ", 玩家Id: "
-						<< avatar->getPlayerId() << ", 当前押金数量: " << cashPledge;
-					return false;
-				}
-			}
-			else {
-				// 删除数据库中的押金记录
-				if (!updateCashPledge(avatar->getPlayerId(), 0)) {
-					ErrorS << "扣除押金失败：删除押金记录失败，场地Id: " << getId() << ", 玩家Id: "
-						<< avatar->getPlayerId() << ", 当前押金数量: " << cashPledge;
-					return false;
-				}
-			}
-			ss.str("");
-			ss << "update `capital` set `gold` = " << gold
-				<< ", `version` = `version` + 1 where `player_id` = \""
-				<< avatar->getPlayerId() << "\" and `version` = " << task1->getVersion();
-			sql = ss.str();
-			std::shared_ptr<MysqlCommonTask> task2 = std::make_shared<MysqlCommonTask>(sql, MysqlQueryTask::QueryType::Update);
-			MysqlPool::getSingleton().syncQuery(task2);
-			if (!task2->getSucceed()) {
-				ErrorS << "扣除押金失败：更新金币数量失败，场地Id: " << getId() << ", 玩家Id: "
-					<< avatar->getPlayerId() << ", 当前押金数量: " << cashPledge;
-				return false;
-			}
-			if (task2->getAffectedRecords() > 0) {
-				if (test)
-					cashPledge = goldNeed;
-				else
-					cashPledge = 0;
-				avatar->setGold(gold);
-				avatar->setCashPledge(cashPledge);
-				return test;
-			}
 		}
-		ErrorS << "扣除押金失败，场地Id: " << getId() << ", 玩家Id: " << avatar->getPlayerId() << ", 当前押金数量: " << cashPledge;
-		return false;
-	}
 
 	bool GameRoom::updateCashPledge(const std::string& playerId, int64_t cashPledge) const {
 		std::stringstream ss;
@@ -1050,7 +1045,7 @@ namespace NiuMa
 		}
 		if (resp.success) {
 			// 加入游戏
-			resp.success = joinGame(inst->seat, inst->getPlayerId(), resp.errMsg);
+			resp.success = joinGame(inst->seat, inst->getPlayerId(), BaseUtils::EMPTY_STRING, resp.errMsg);
 		}
 #ifdef _MSC_VER
 		if (!resp.success) {

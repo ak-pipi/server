@@ -114,7 +114,7 @@
 	void DouDiZhuRoom::getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const {
 		if (!avatar)
 			return;
-		int64_t gold = avatar->getCashPledge() + avatar->getGold();
+		int64_t gold = avatar->getCashPledge();
 		Json::Value tmp(Json::objectValue);
 		tmp["gold"] = static_cast<Json::Int64>(gold);
 		tmp["diamond"] = static_cast<Json::Int64>(0);
@@ -509,10 +509,25 @@
 			_spring = true;
 		else if (winnerSeat != _landlordSeat && _playCounts[_landlordSeat] <= 1)
 			_spring = true;
-		if (_spring)
-			_multiplier *= 2;
-		calculateScores(winnerSeat);
-		notifySettlement(winnerSeat);
+			if (_spring)
+				_multiplier *= 2;
+			calculateScores(winnerSeat);
+			bool finishRoom = (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount());
+			for (int i = 0; i < 2; i++) {
+				std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
+				if (!avatar)
+					continue;
+				int64_t cashPledge = avatar->getCashPledge() + avatar->getWinGold();
+				if (cashPledge < 0)
+					cashPledge = 0;
+				if (updateCashPledge(avatar->getPlayerId(), cashPledge))
+					avatar->setCashPledge(cashPledge);
+				else
+					finishRoom = true;
+				if (avatar->getCashPledge() <= 0)
+					finishRoom = true;
+			}
+			notifySettlement(winnerSeat);
 		for (int i = 0; i < 2; i++) {
 			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
 			if (!avatar)
@@ -529,11 +544,12 @@
 			_callStarter = -1;
 			_callTurn = -1;
 			_currentPlayer = -1;
-			if (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount()) {
-				publishFinalRoomFee();
-				gameOver();
-				return;
-			}
+				if (finishRoom) {
+					publishFinalRoomFee();
+					kickAllAvatars();
+					gameOver();
+					return;
+				}
 			setState(GameState::Ready);
 		}
 
@@ -674,10 +690,14 @@
 		}
 
 		void DouDiZhuRoom::calculateScores(int winnerSeat) {
-		int score = _rule->getBaseScore() * std::max(1, _multiplier);
-		if (_rule->getMaxRoundScore() > 0)
-			score = std::min(score, _rule->getMaxRoundScore());
-		for (int i = 0; i < 2; i++) {
+			int score = _rule->getBaseScore() * std::max(1, _multiplier);
+			if (_rule->getMaxRoundScore() > 0)
+				score = std::min(score, _rule->getMaxRoundScore());
+			int loserSeat = getNextSeat(winnerSeat);
+			std::shared_ptr<DouDiZhuAvatar> loser = getAvatar(loserSeat);
+			if (loser)
+				score = static_cast<int>(std::min<int64_t>(score, std::max<int64_t>(0LL, loser->getCashPledge())));
+			for (int i = 0; i < 2; i++) {
 			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
 			if (!avatar)
 				continue;

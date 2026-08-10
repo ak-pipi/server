@@ -135,22 +135,6 @@ namespace NiuMa {
 		bool returnCashPledge(const std::string& playerId) const;
 
 		/**
-		 * 从玩家金币中补充扣除押金，若不足够扣除则将全部押金转为玩家金币并将玩家踢出游戏房
-		 * @param avatar 玩家替身
-		 * @return 是否补充扣除成功，不成功可能是金币不足或者数据库错误
-		 */
-		bool deductCashPledge(const GameAvatar::Ptr& avatar) const;
-
-		/**
-		 * 从玩家金币中补充扣除押金
-		 * @param avatar 玩家替身
-		 * @param goldNeed 需要扣除的目标押金总数，注意不是补充扣除增量
-		 * @param kick true：若不足够扣除则将全部押金转为玩家金币并将玩家踢出游戏房，false：扣除失败
-		 * @return 是否补充扣除成功，不成功可能是金币不足或者数据库错误
-		 */
-		bool deductCashPledge(const GameAvatar::Ptr& avatar, int64_t goldNeed, bool kick) const;
-
-		/**
 		 * 更新数据库中的押金数量
 		 * @param playerId 玩家id
 		 * @param cashPledge 押金数量，当该值为0时删除数据库中的押金记录
@@ -495,7 +479,7 @@ namespace NiuMa {
 		 * @param robot 是否为机器人
 		 * @return 是否加入成功
 		 */
-		bool joinGame(int seat, const std::string& playerId, std::string& errMsg, bool robot = false);
+		bool joinGame(int seat, const std::string& playerId, const std::string& base64, std::string& errMsg, bool robot = false);
 
 		/**
 		 * 添加玩家替身

@@ -215,7 +215,6 @@ namespace NiuMa
 		int64_t gold = avatar->getCashPledge();
 		int64_t diamond = 0LL;
 		if (task->getSucceed() && task->getRows() > 0) {
-			gold += task->getGold();
 			diamond = task->getDiamond();
 		}
 		Json::Value tmp(Json::objectValue);
@@ -434,34 +433,30 @@ namespace NiuMa
 
 		double delta = 0.0;
 		int64_t cashPledge = 0LL;
-		int64_t goldNeed = getCashPledge();
 		bool test = true;
 		GameAvatar::Ptr ptr;
 		ChangShaMahjongAvatar* avatar = nullptr;
-		std::shared_ptr<GetCapitalTask> task;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			ptr = getAvatar(i);
 			avatar = dynamic_cast<ChangShaMahjongAvatar*>(ptr.get());
 			if (avatar == nullptr)
 				continue;
-				delta = floor(avatar->getWinGold() + 0.5);
-				avatar->setWinGold(delta);
-				msg.winGolds[i] = static_cast<int>(delta);
-				_totalWinGolds[i] += msg.winGolds[i];
-				cashPledge = avatar->getCashPledge();
+			delta = floor(avatar->getWinGold() + 0.5);
+			avatar->setWinGold(delta);
+			msg.winGolds[i] = static_cast<int>(delta);
+			_totalWinGolds[i] += msg.winGolds[i];
+			cashPledge = avatar->getCashPledge();
 			cashPledge += msg.winGolds[i];
+			if (cashPledge < 0)
+				cashPledge = 0;
 			test = true;
-			if (msg.winGolds[i] != 0) {
-				if (cashPledge < goldNeed)
-					test = deductCashPledge(ptr);
-				else
-					updateCashPledge(avatar->getPlayerId(), cashPledge);
+			if (cashPledge != avatar->getCashPledge()) {
+				test = updateCashPledge(avatar->getPlayerId(), cashPledge);
+				if (test)
+					avatar->setCashPledge(cashPledge);
 			}
-			task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
-			MysqlPool::getSingleton().syncQuery(task);
-			if (task->getSucceed() && task->getRows() > 0)
-				msg.golds[i] = task->getGold() + avatar->getCashPledge();
-			if (!test)
+			msg.golds[i] = avatar->getCashPledge();
+			if (!test || avatar->getCashPledge() <= 0)
 				_kicks[i] = true;
 		}
 		if (allRoundsFinished) {
@@ -501,6 +496,7 @@ namespace NiuMa
 		}
 		if (allRoundsFinished) {
 			publishFinalRoomFee();
+			kickAllAvatars();
 			gameOver();
 		}
 	}
@@ -553,7 +549,7 @@ namespace NiuMa
 
 		MsgChangShaSyncResp msg;
 		msg.number = _number;
-		msg.gold = task->getGold();
+		msg.gold = avatar->getCashPledge();
 		msg.diamond = task->getDiamond();
 		msg.diZhu = _diZhu;
 		msg.chi = _allowChi;

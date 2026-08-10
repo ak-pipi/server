@@ -185,6 +185,9 @@ namespace NiuMa
 		// 收到消息的玩家是否因金币不足被踢出
 		bool kick;
 
+		// 本房间是否已经最终结束（局数完成、解散或有人携带积分输完）
+		bool roomFinished;
+
 		// 结算后玩家的金币数
 		int64_t golds[4];
 
@@ -206,7 +209,7 @@ namespace NiuMa
 		std::vector<std::string> shuffleFeePlayerIds;
 		std::vector<int64_t> shuffleFeeAmounts;
 
-		MSGPACK_DEFINE_MAP(kick, golds, winGolds, yingZhuang, data, roundNo, roundCount,
+		MSGPACK_DEFINE_MAP(kick, roomFinished, golds, winGolds, yingZhuang, data, roundNo, roundCount,
 			roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
 			shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
 	};

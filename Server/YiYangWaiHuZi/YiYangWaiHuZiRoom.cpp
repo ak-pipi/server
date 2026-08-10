@@ -405,30 +405,51 @@ namespace NiuMa
 		int huxi = calcTotalHuXi(huSeat);
 		int baseScore = huxi * _tunScoreRate;
 		if (baseScore > _maxScore) baseScore = _maxScore;
+		int64_t winnerGold = 0LL;
 
 		for (int _si = 0; _si < _playerCount; _si++) {
 			auto a = getAvatar(_si);
 			if (!a) continue;
-				if (_si == huSeat) {
-					a->setRoundScore(baseScore * (_playerCount - 1));
-					a->setWinGold(baseScore * (_playerCount - 1) * _level);
-				}
-				else {
-					a->setRoundScore(-baseScore);
-					a->setWinGold(-baseScore * _level);
-				}
-				if (_si < 3)
-					_totalWinGolds[_si] += static_cast<int64_t>(a->getWinGold());
-			}
+			if (_si == huSeat)
+				continue;
+			int64_t loss = static_cast<int64_t>(baseScore) * _level;
+			loss = std::min<int64_t>(loss, std::max<int64_t>(0LL, a->getCashPledge()));
+			winnerGold += loss;
+			a->setRoundScore(-baseScore);
+			a->setWinGold(-static_cast<double>(loss));
+		}
+		auto winner = getAvatar(huSeat);
+		if (winner) {
+			winner->setRoundScore(baseScore * (_playerCount - 1));
+			winner->setWinGold(static_cast<double>(winnerGold));
+		}
 
-			notifySettlement(huSeat);
-			saveRoundRecord();
-			_banker = huSeat;
-			if (_roundLimit > 0 && _roundNo >= _roundLimit) {
-				publishFinalRoomFee();
-				gameOver();
-				return;
-			}
+		bool finishRoom = (_roundLimit > 0 && _roundNo >= _roundLimit);
+		for (int _si = 0; _si < _playerCount; _si++) {
+			auto a = getAvatar(_si);
+			if (!a) continue;
+			if (_si < 3)
+				_totalWinGolds[_si] += static_cast<int64_t>(a->getWinGold());
+			int64_t cashPledge = a->getCashPledge() + static_cast<int64_t>(a->getWinGold());
+			if (cashPledge < 0)
+				cashPledge = 0;
+			if (updateCashPledge(a->getPlayerId(), cashPledge))
+				a->setCashPledge(cashPledge);
+			else
+				finishRoom = true;
+			if (a->getCashPledge() <= 0)
+				finishRoom = true;
+		}
+
+				notifySettlement(huSeat);
+				saveRoundRecord();
+				_banker = huSeat;
+				if (finishRoom) {
+					publishFinalRoomFee();
+					kickAllAvatars();
+					gameOver();
+					return;
+				}
 			setState(GameState::Ready);
 		}
 

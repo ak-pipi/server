@@ -162,7 +162,6 @@ namespace NiuMa
 		int64_t gold = avatar->getCashPledge();
 		int64_t diamond = 0LL;
 		if (task->getSucceed() && task->getRows() > 0) {
-			gold += task->getGold();
 			diamond = task->getDiamond();
 		}
 		Json::Value tmp(Json::objectValue);
@@ -260,7 +259,7 @@ namespace NiuMa
 		}
 		MsgHZSyncResp msg;
 		msg.number = _number;
-		msg.gold = task->getGold();
+		msg.gold = avatar->getCashPledge();
 		msg.diamond = task->getDiamond();
 		msg.diZhu = _diZhu;
 		msg.chi = _allowChi;
@@ -939,29 +938,6 @@ namespace NiuMa
 				avatar1->setScore(scores[i]);
 		}
 
-		// 结算前按本局实际应赔积分补足押金，避免扎鸟等倍数把应赔额放大后被初始押金截断。
-		for (int i = 0; i < getMaxPlayerNums(); i++) {
-			GameAvatar::Ptr ptr = getAvatar(i);
-			avatar1 = dynamic_cast<HongZhongMahjongAvatar*>(ptr.get());
-			if (avatar1 == NULL)
-				continue;
-
-			avatar1->getLoseScores(loseScores);
-			double requiredCapital = static_cast<double>(avatar1->getCashPledge());
-			double owed = 0.0;
-			for (int j = 0; j < 4; j++) {
-				if (i != j && loseScores[j] > 0)
-					owed += _diZhu * loseScores[j];
-			}
-			if (owed > requiredCapital) {
-				int64_t pledgeNeed = static_cast<int64_t>(std::ceil(owed));
-				if (!deductCashPledge(ptr, pledgeNeed, false)) {
-					InfoS << "红中麻将结算押金不足，玩家=" << avatar1->getPlayerId()
-						<< "，需要=" << pledgeNeed << "，当前押金=" << avatar1->getCashPledge();
-				}
-			}
-		}
-
 		// DebtLiquidation清算
 		bool test = false;
 		double diZhu = _diZhu;
@@ -1053,11 +1029,9 @@ namespace NiuMa
 
 		double delta = 0.0;
 		int64_t cashPledge = 0LL;
-		int64_t goldNeed = getCashPledge();
 		bool test = true;
 		GameAvatar::Ptr ptr;
 		HongZhongMahjongAvatar* avatar = NULL;
-		std::shared_ptr<GetCapitalTask> task;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			ptr = getAvatar(i);
 			avatar = dynamic_cast<HongZhongMahjongAvatar*>(ptr.get());
@@ -1072,20 +1046,16 @@ namespace NiuMa
 			_totalWinGolds[i] += msg.winGolds[i];
 			cashPledge = avatar->getCashPledge();
 			cashPledge += msg.winGolds[i];
+			if (cashPledge < 0)
+				cashPledge = 0;
 			test = true;
-			if (msg.winGolds[i] != 0) {
-				if (cashPledge < goldNeed) {
-					test = deductCashPledge(ptr);
-				}
-				else {
-					updateCashPledge(avatar->getPlayerId(), cashPledge);
-				}
+			if (cashPledge != avatar->getCashPledge()) {
+				test = updateCashPledge(avatar->getPlayerId(), cashPledge);
+				if (test)
+					avatar->setCashPledge(cashPledge);
 			}
-			task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
-			MysqlPool::getSingleton().syncQuery(task);
-			if (task->getSucceed() && task->getRows() > 0)
-				msg.golds[i] = task->getGold() + avatar->getCashPledge();
-			if (!test)
+			msg.golds[i] = avatar->getCashPledge();
+			if (!test || avatar->getCashPledge() <= 0)
 				_kicks[i] = true;
 		}
 		if (allRoundsFinished) {
@@ -1126,6 +1096,7 @@ namespace NiuMa
 			}
 			if (allRoundsFinished) {
 				publishFinalRoomFee();
+				kickAllAvatars();
 				gameOver();
 			}
 		}

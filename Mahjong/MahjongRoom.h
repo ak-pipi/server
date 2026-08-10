@@ -172,6 +172,12 @@ namespace NiuMa
 		 */
 		virtual bool canCreateDianPaoOption(MahjongAvatar* pAvatar, const MahjongTile& mt, std::string& passed) const;
 
+		/**
+		 * 判断是否为某个玩家创建直杠动作选项。默认使用通用 canZhiGang 判断，
+		 * 子类可覆写以加入听牌不变等地方规则。
+		 */
+		virtual bool canCreateZhiGangOption(MahjongAvatar* pAvatar, const MahjongTile& mt) const;
+
 		// 是否提前结束(流局)
 		virtual bool earlyTermination() const;
 

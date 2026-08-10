@@ -31,7 +31,7 @@ namespace NiuMa
 			, _deckCount(2), _bombEnabled(false), _roundLimit(0), _maxScore(500), _roomFee(0)
 	{
 		_rule->initialise();
-		for (int i = 0; i < 4; i++) { _totalScores[i] = 0; _roundScores[i] = 0; }
+		for (int i = 0; i < 4; i++) { _totalScores[i] = 0; _roundScores[i] = 0; _totalGolds[i] = 0; _roundGolds[i] = 0; }
 		parseRuleConfig(ruleConfig);
 	}
 
@@ -92,7 +92,7 @@ namespace NiuMa
 		GameRoom::clean();
 		_gameState = GameState::None;
 		_roundNo = 0; _roundCount = 0;
-		for (int i = 0; i < 4; i++) { _totalScores[i] = 0; _roundScores[i] = 0; }
+		for (int i = 0; i < 4; i++) { _totalScores[i] = 0; _roundScores[i] = 0; _totalGolds[i] = 0; _roundGolds[i] = 0; }
 		_playbackData = QianFenPlaybackData();
 	}
 
@@ -147,7 +147,7 @@ namespace NiuMa
 		_roundNo++; _roundCount++;
 		_highestCallScore = 0; _highestCallSeat = -1; _callScoreCount = 0;
 		_isFirstPlay = true; _lastPlaySeat = -1; _lastPlayGenre.clear();
-		for (int i = 0; i < 4; i++) _roundScores[i] = 0;
+		for (int i = 0; i < 4; i++) { _roundScores[i] = 0; _roundGolds[i] = 0; }
 
 		_playbackData = QianFenPlaybackData();
 		_playbackData.venueId = getId();
@@ -292,6 +292,48 @@ namespace NiuMa
 			_totalScores[winnerSeat] += winnerScore;
 		}
 
+		int64_t desiredGolds[4] = { 0LL, 0LL, 0LL, 0LL };
+		int64_t totalDesiredWin = 0LL;
+		int64_t totalPaid = 0LL;
+		for (int i = 0; i < 4; i++) {
+			desiredGolds[i] = static_cast<int64_t>(_roundScores[i]) * _level;
+			_roundGolds[i] = 0LL;
+			auto avatar = GameRoom::getAvatar(i);
+			if (!avatar)
+				continue;
+			if (desiredGolds[i] < 0LL) {
+				int64_t loss = std::min<int64_t>(-desiredGolds[i], std::max<int64_t>(0LL, avatar->getCashPledge()));
+				_roundGolds[i] = -loss;
+				totalPaid += loss;
+			}
+			else if (desiredGolds[i] > 0LL)
+				totalDesiredWin += desiredGolds[i];
+		}
+		int64_t distributed = 0LL;
+		int lastWinner = -1;
+		if (totalDesiredWin > 0LL) {
+			for (int i = 0; i < 4; i++) {
+				if (desiredGolds[i] <= 0LL)
+					continue;
+				lastWinner = i;
+				_roundGolds[i] = desiredGolds[i] * totalPaid / totalDesiredWin;
+				distributed += _roundGolds[i];
+			}
+			if (lastWinner >= 0)
+				_roundGolds[lastWinner] += totalPaid - distributed;
+		}
+		for (int i = 0; i < 4; i++) {
+			auto avatar = GameRoom::getAvatar(i);
+			if (!avatar)
+				continue;
+			_totalGolds[i] += _roundGolds[i];
+			int64_t cashPledge = avatar->getCashPledge() + _roundGolds[i];
+			if (cashPledge < 0)
+				cashPledge = 0;
+			if (updateCashPledge(avatar->getPlayerId(), cashPledge))
+				avatar->setCashPledge(cashPledge);
+		}
+
 		notifyRoundResult();
 		saveRoundRecord();
 		checkGameEnd();
@@ -303,12 +345,18 @@ namespace NiuMa
 		for (int i = 0; i < 4; i++) {
 			if (_totalScores[i] >= _targetScore) { gameEnd = true; break; }
 		}
+		for (int i = 0; i < 4 && !gameEnd; i++) {
+			auto avatar = GameRoom::getAvatar(i);
+			if (avatar && avatar->getCashPledge() <= 0)
+				gameEnd = true;
+		}
 		// 检查局数限制
 		if (_roundLimit > 0 && _roundCount >= _roundLimit) gameEnd = true;
 
 		if (gameEnd) {
 			notifyFinalResult();
 			publishFinalRoomFee();
+			kickAllAvatars();
 			gameOver();
 			_gameState = GameState::None;
 		}
@@ -329,7 +377,7 @@ namespace NiuMa
 			if (idx < 4 && _av) {
 				task->_playerIds[idx] = _av->getPlayerId();
 				task->_scores[idx] = _roundScores[idx];
-				task->_winGolds[idx] = _roundScores[idx] * _level;
+				task->_winGolds[idx] = _roundGolds[idx];
 			}
 			idx++;
 		}
@@ -344,9 +392,9 @@ namespace NiuMa
 		_riskCollector.setRandomSeedHash(_playbackData.randomSeedHash);
 		for (int _si = 0; _si < 4; _si++) {
 			auto _av = GameRoom::getAvatar(_si);
-			if (_av)
-				_riskCollector.recordScore(_av->getPlayerId(), _roundScores[_si],
-					static_cast<int64_t>(_roundScores[_si]) * _level);
+				if (_av)
+					_riskCollector.recordScore(_av->getPlayerId(), _roundScores[_si],
+						_roundGolds[_si]);
 		}
 		_riskCollector.finishRound();
 
@@ -455,7 +503,7 @@ namespace NiuMa
 
 	void YuanJiangQianFenRoom::notifyRoundResult() {
 		auto msg = std::make_shared<MsgQianFenRoundResult>();
-		for (int i = 0; i < 4; i++) { msg->scores[i] = _roundScores[i]; msg->winGolds[i] = _roundScores[i] * _level; }
+		for (int i = 0; i < 4; i++) { msg->scores[i] = _roundScores[i]; msg->winGolds[i] = _roundGolds[i]; }
 		sendMessageToAll(*msg);
 	}
 
@@ -465,7 +513,7 @@ namespace NiuMa
 			auto _av = GameRoom::getAvatar(_si);
 			if (_av) {
 				msg->totalScores[_si] = _totalScores[_si];
-					msg->totalGolds[_si] = _totalScores[_si] * _level;
+					msg->totalGolds[_si] = _totalGolds[_si];
 					msg->playerIds[_si] = _av->getPlayerId();
 				}
 			}
@@ -475,7 +523,7 @@ namespace NiuMa
 					auto _av = GameRoom::getAvatar(_si);
 					if (!_av)
 						continue;
-					netWins.emplace_back(_av->getPlayerId(), static_cast<int64_t>(_totalScores[_si]) * _level);
+					netWins.emplace_back(_av->getPlayerId(), _totalGolds[_si]);
 				}
 				calcRoomFeeSettlementData(_roomFee, netWins,
 					msg->roomFeeTotal, msg->roomFeePlayerIds, msg->roomFeeAmounts);
@@ -487,7 +535,7 @@ namespace NiuMa
 			for (int _si = 0; _si < 4; _si++) {
 				auto _av = GameRoom::getAvatar(_si);
 				if (!_av) continue;
-				int64_t g = _totalScores[_si] * _level;
+				int64_t g = _totalGolds[_si];
 				if (g > 0) WalletEventTask::publish(_av->getPlayerId(), "GAME_WIN", g, "YuanJiangQianFen", getId(), "沅江千分赢得金币");
 				else if (g < 0) WalletEventTask::publish(_av->getPlayerId(), "GAME_LOSE", -g, "YuanJiangQianFen", getId(), "沅江千分输掉金币");
 			}
@@ -501,7 +549,7 @@ namespace NiuMa
 				auto _av = GameRoom::getAvatar(_si);
 				if (!_av)
 					continue;
-				netWins.emplace_back(_av->getPlayerId(), static_cast<int64_t>(_totalScores[_si]) * _level);
+				netWins.emplace_back(_av->getPlayerId(), _totalGolds[_si]);
 			}
 				publishRoomFeeOnGameOver(_roomFee, netWins, "YuanJiangQianFen", "沅江千分整场房费");
 			}

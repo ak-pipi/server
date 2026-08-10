@@ -333,7 +333,7 @@ namespace NiuMa
 	}
 
 	void GuanDanRoom::getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const {
-		int64_t gold = avatar->getCashPledge() + avatar->getGold();
+		int64_t gold = avatar->getCashPledge();
 		Json::Value tmp(Json::objectValue);
 		tmp["gold"] = static_cast<Json::Int64>(gold);
 		if (!avatar->isOffline()) {
@@ -2062,6 +2062,7 @@ namespace NiuMa
 			sendMessageToAll(msg);
 			if (_roundLimit > 0 && _roundNo >= _roundLimit) {
 				publishFinalRoomFee();
+				kickAllAvatars();
 				gameOver();
 			return;
 		}

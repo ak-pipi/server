@@ -91,7 +91,6 @@ namespace NiuMa
 		int64_t gold = avatar->getCashPledge();
 		int64_t diamod = 0LL;
 		if (task->getSucceed() && task->getRows() > 0) {
-			gold += task->getGold();
 			diamod = task->getDiamond();
 		}
 		Json::Value tmp(Json::objectValue);
@@ -162,7 +161,7 @@ namespace NiuMa
 		}
 		MsgMahjongSyncResp msg;
 		msg.number = _number;
-		msg.gold = task->getGold();
+		msg.gold = avatar->getCashPledge();
 		msg.diamond = task->getDiamond();
 		msg.mode = _mode;
 		msg.diZhu = _diZhu;
@@ -526,11 +525,9 @@ namespace NiuMa
 		int64_t tmp = 0LL;
 		int64_t diamond = 0;
 		int64_t cashPledge = 0LL;
-		int64_t goldNeed = getCashPledge();
 		bool test = true;
 		GameAvatar::Ptr ptr;
 		StandardMahjongAvatar* avatar = NULL;
-		std::shared_ptr<GetCapitalTask> task;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			ptr = getAvatar(i);
 			avatar = dynamic_cast<StandardMahjongAvatar*>(ptr.get());
@@ -551,23 +548,17 @@ namespace NiuMa
 			msg.winGolds[i] = static_cast<int>(delta);
 			cashPledge = avatar->getCashPledge();
 			cashPledge += msg.winGolds[i];
+			if (cashPledge < 0)
+				cashPledge = 0;
 			test = true;
-			if (msg.winGolds[i] != 0) {
-				if (cashPledge < goldNeed) {
-					// 押金不足，尝试从玩家金币中补充扣除
-					test = deductCashPledge(ptr);
-				}
-				else {
-					// 将当前押金数额保存到数据库
-					updateCashPledge(avatar->getPlayerId(), cashPledge);
-				}
+			if (cashPledge != avatar->getCashPledge()) {
+				test = updateCashPledge(avatar->getPlayerId(), cashPledge);
+				if (test)
+					avatar->setCashPledge(cashPledge);
 			}
-			task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
-			MysqlPool::getSingleton().syncQuery(task);
-			if (task->getSucceed() && task->getRows() > 0)
-				msg.golds[i] = task->getGold() + avatar->getCashPledge();
-			if (!test)
-				_kicks[i] = true;	// 玩家剩余金币已经低于房间最低限制，踢出
+			msg.golds[i] = avatar->getCashPledge();
+			if (!test || avatar->getCashPledge() <= 0)
+				_kicks[i] = true;	// 玩家房间积分已不足，踢出
 			else if (_mode == 0) {
 				// 扣钻模式，检查玩家钻石是否还够下局扣除
 				std::shared_ptr<GetCapitalTask> task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());

@@ -237,7 +237,6 @@ namespace NiuMa
 		int64_t gold = avatar->getCashPledge();
 		int64_t diamod = 0LL;
 		if (task->getSucceed() && task->getRows() > 0) {
-			gold += task->getGold();
 			diamod = task->getDiamond();
 		}
 		Json::Value tmp(Json::objectValue);
@@ -1498,7 +1497,6 @@ namespace NiuMa
 		const double rate = 0.01;
 		int64_t temp = 0LL;
 		int64_t cashPledge = 0LL;
-		int64_t goldNeed = getCashPledge();
 		int64_t diamond = 0;
 		int64_t diamondNeed = getDiamondNeed();
 		GameAvatar::Ptr ptr;
@@ -1525,17 +1523,14 @@ namespace NiuMa
 				}
 				cashPledge = avatar->getCashPledge();
 				cashPledge += static_cast<int64_t>(delta);
-				if (cashPledge < goldNeed) {
-					// 押金不足，尝试从玩家金币中扣除
-					test = deductCashPledge(ptr);
-				}
-				else {
-					// 将当前押金数额保存到数据库
-					updateCashPledge(avatar->getPlayerId(), cashPledge);
-				}
+				if (cashPledge < 0)
+					cashPledge = 0;
+				test = updateCashPledge(avatar->getPlayerId(), cashPledge);
+				if (test)
+					avatar->setCashPledge(cashPledge);
 			}
-			if (!test)
-				_kicks[i] = true;	// 玩家剩余金币已经低于房间最低限制，踢出
+			if (!test || avatar->getCashPledge() <= 0)
+				_kicks[i] = true;	// 玩家房间积分已不足，踢出
 			else if (_mode == 0) {
 				// 扣钻模式，检查玩家钻石是否还够下局扣除
 				std::shared_ptr<GetCapitalTask> task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
@@ -1617,7 +1612,6 @@ namespace NiuMa
 		msg.first = _current;
 		LackeyAvatarEx* avatar = nullptr;
 		LackeyResult result;
-		std::shared_ptr<GetCapitalTask> task;
 		for (int i = 0; i < getMaxPlayerNums(); i++) {
 			avatar = dynamic_cast<LackeyAvatarEx*>(getAvatar(i).get());
 			if (avatar == nullptr)
@@ -1625,11 +1619,7 @@ namespace NiuMa
 			result.score = avatar->getScore();
 			result.xiQian = avatar->getXiQianScore();
 			result.winGold = static_cast<int>(avatar->getWinGold());
-			task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
 			result.gold = avatar->getCashPledge();
-			MysqlPool::getSingleton().syncQuery(task);
-			if (task->getSucceed() && (task->getRows() > 0))
-				result.gold += task->getGold();
 			result.showCard = avatar->isShowCard();
 			msg.results.push_back(result);
 		}

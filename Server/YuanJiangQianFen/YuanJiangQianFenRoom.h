@@ -93,6 +93,8 @@ namespace NiuMa
 		int _totalScores[4];
 		// 每个玩家本轮得分（计分牌）
 		int _roundScores[4];
+		int64_t _totalGolds[4];
+		int64_t _roundGolds[4];
 
 		// 规则配置
 		int _playerCount;

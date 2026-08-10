@@ -55,7 +55,7 @@ namespace NiuMa
 		virtual void passActionOption(const std::string& playerId) override;
 
 		/**
-		 * 重写摸牌/吃/碰后出杠：桃江麻将需听牌才能开杠
+		 * 重写摸牌/吃/碰后出杠：桃江麻将实时判断杠后是否仍听牌。
 		 */
 		virtual void afterFetchChiPeng(MahjongAvatar* pAvatar, int fetchedId = -1) override;
 		virtual bool canShuffleCardsBeforeNextRound(const std::string& playerId,
@@ -135,6 +135,11 @@ namespace NiuMa
 		virtual bool canCreateDianPaoOption(MahjongAvatar* pAvatar, const MahjongTile& mt, std::string& passed) const override;
 
 		/**
+		 * 重写直杠动作创建：必须已听，且开杠四张牌移出后听口不变。
+		 */
+		virtual bool canCreateZhiGangOption(MahjongAvatar* pAvatar, const MahjongTile& mt) const override;
+
+		/**
 		 * 重写胡牌检测，添加天胡/天天胡/地胡检测（桃江麻将特有规则）
 		 */
 		virtual void doHu() override;
@@ -150,7 +155,7 @@ namespace NiuMa
 		int countLaiZiInHand(MahjongAvatar* pAvatar) const;
 
 		/**
-		 * 判断胡牌是否为硬庄：存在一种不把赖子当万能牌的胡牌拆法，或完全没有赖子
+		 * 判断胡牌是否为硬庄：没有赖子，或赖子均按本身牌面自然成胡且满足硬庄基础将牌约束
 		 */
 		bool isYingZhuangHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool zimo) const;
 
@@ -182,7 +187,7 @@ namespace NiuMa
 		void ensureTingTile(MahjongAvatar* avatar, const MahjongTile& mt, MahjongGenre::HuStyle style) const;
 
 		/**
-		 * 根据大胡数量、胡牌方式和硬庄计算单份胡分（不含台桌分，台桌分在债务清算中乘）
+			 * 根据大胡数量、胡牌方式和硬庄计算单份胡分（不含台桌分，结算时统一乘）
 		 */
 		int calcBaseHuScore(int daHuCount, bool zimo, bool yingZhuang) const;
 
@@ -192,7 +197,7 @@ namespace NiuMa
 		int calcQiangGangHuScore(const MahjongTile& huTile) const;
 
 		/**
-		 * 报听后、或开杠后再杠，必须保持听口不变
+		 * 开杠后必须仍然听牌；报听后开杠还必须保持报听听口不变。
 		 */
 		bool shouldKeepTingForGang(TaoJiangMahjongAvatar* avatar, const MahjongTile& gangTile, MahjongAction::Type gangType) const;
 
@@ -209,10 +214,12 @@ namespace NiuMa
 		/**
 		 * 为对手添加抢杠/抢翻牌胡动作
 		 */
-		bool addQiangGangOptions(MahjongAvatar* gangPlayer, const MahjongTileArray& candidateTiles);
+		bool addQiangGangOptions(MahjongAvatar* gangPlayer,
+			const MahjongTileArray& gangTileCandidates,
+			const MahjongTileArray& revealedCandidates);
 
 		/**
-		 * 杠后无人胡时，翻牌进入弃牌池并切到对家摸牌
+		 * 杠后无人胡时，翻牌进入弃牌池并切到下家摸牌；开杠者进入锁定状态。
 		 */
 		void finishGangRevealWithoutHu(MahjongAvatar* gangPlayer);
 
@@ -440,6 +447,7 @@ namespace NiuMa
 		 * 当前杠操作的牌id（用于明杠本身牌可抢）
 		 */
 		int _lastGangTileId;
+
 	};
 }
 

@@ -128,7 +128,6 @@ namespace NiuMa
 		int64_t gold = avatar->getCashPledge();
 		int64_t diamond = 0LL;
 		if (task->getSucceed() && task->getRows() > 0) {
-			gold += task->getGold();
 			diamond = task->getDiamond();
 		}
 		Json::Value tmp(Json::objectValue);
@@ -609,6 +608,22 @@ namespace NiuMa
 
 		calculateScores(winnerSeat);
 
+		bool finishRoom = (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount());
+		for (int _si = 0; _si < 2; _si++) {
+			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+			if (!avatar)
+				continue;
+			int64_t cashPledge = avatar->getCashPledge() + avatar->getWinGold();
+			if (cashPledge < 0)
+				cashPledge = 0;
+			if (updateCashPledge(avatar->getPlayerId(), cashPledge))
+				avatar->setCashPledge(cashPledge);
+			else
+				finishRoom = true;
+			if (avatar->getCashPledge() <= 0)
+				finishRoom = true;
+		}
+
 		// 通知结算
 		notifySettlement(winnerSeat);
 
@@ -644,8 +659,9 @@ namespace NiuMa
 		// 更新庄家（赢家做庄）
 		_banker = winnerSeat;
 
-		if (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount()) {
+		if (finishRoom) {
 			publishFinalRoomFee();
+			kickAllAvatars();
 			gameOver();
 			return;
 		}
@@ -680,6 +696,8 @@ namespace NiuMa
 		int maxScore = _rule->getMaxRoundScore();
 		if (maxScore > 0 && loserScore > maxScore)
 			loserScore = maxScore;
+		if (loser)
+			loserScore = static_cast<int>(std::min<int64_t>(loserScore, std::max<int64_t>(0LL, loser->getCashPledge())));
 		_multiplier = multiplier;
 
 		for (int _si = 0; _si < 2; _si++) {
