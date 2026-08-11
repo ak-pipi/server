@@ -95,14 +95,32 @@ namespace NiuMa
 		// 是否已经出过牌（用于恢复新一轮首出状态）
 		bool _hasFirstPlayed;
 
-		// 炸弹翻倍次数
+		// 本局出过的炸弹次数
 		int _bombCount;
 
 		// 当前结算倍数
 		int _multiplier;
 
-			// 本局是否关门/春天
-			bool _spring;
+		// 扎鸟命中后的牌张/春天倍数
+		int _birdMultiplier;
+
+		// 本局红桃10是否命中扎鸟
+		bool _birdHit;
+
+		// 红桃10所在座位
+		int _birdSeat;
+
+		// 本轮尚未结算的最大炸弹座位
+		int _pendingBombSeat;
+
+		// 各玩家本局炸弹分
+		int _bombScoreDeltas[2];
+
+		// 各玩家本局得分炸弹次数
+		int _bombWinCounts[2];
+
+		// 本局是否关门/春天
+		bool _spring;
 
 			int64_t _roomFee;
 
@@ -162,6 +180,12 @@ namespace NiuMa
 
 		// 切换到下一个出牌玩家
 		void nextPlayer();
+
+		// 是否启用扎鸟
+		bool isZhaNiaoEnabled() const;
+
+		// 结算当前未被管住的炸弹
+		void finalizePendingBomb();
 
 		// 检查是否所有人都已准备
 		bool allReady() const;

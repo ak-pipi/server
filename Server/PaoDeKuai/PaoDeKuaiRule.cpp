@@ -35,6 +35,7 @@ namespace NiuMa
 		: _cardCount(15)
 		, _playerCount(2)
 		, _baseScore(1)
+		, _scoreScale(1)
 		, _roundCount(8)
 		, _bombDouble(true)
 		, _bombScore(10)
@@ -44,6 +45,7 @@ namespace NiuMa
 		, _mustIncludeSpade3(false)
 		, _springDouble(true)
 		, _forcePlayIfCanBeat(true)
+		, _zhaNiao(false)
 	{
 		_orderTable = new CardOrderTable();
 	}
@@ -400,6 +402,8 @@ namespace NiuMa
 			_playerCount = root["player_count"].asInt();
 		if (root.isMember("base_score") && root["base_score"].isInt())
 			_baseScore = root["base_score"].asInt();
+		if (root.isMember("score_scale") && root["score_scale"].isInt())
+			_scoreScale = root["score_scale"].asInt();
 		if (root.isMember("round_count") && root["round_count"].isInt())
 			_roundCount = root["round_count"].asInt();
 		if (root.isMember("bomb_double") && root["bomb_double"].isBool())
@@ -420,12 +424,20 @@ namespace NiuMa
 			_springDouble = root["spring_double"].asBool();
 		if (root.isMember("force_play_if_can_beat") && root["force_play_if_can_beat"].isBool())
 			_forcePlayIfCanBeat = root["force_play_if_can_beat"].asBool();
+		if (root.isMember("zha_niao") && root["zha_niao"].isBool())
+			_zhaNiao = root["zha_niao"].asBool();
+		else if (root.isMember("bird_enabled") && root["bird_enabled"].isBool())
+			_zhaNiao = root["bird_enabled"].asBool();
 
 		_playerCount = 2;
 		_cardCount = 15;
 		_mustIncludeSpade3 = false;
 		if (_baseScore < 1)
 			_baseScore = 1;
+		if (_scoreScale < 1)
+			_scoreScale = 1;
+		if (!root.isMember("score_scale") && _roundCount == 8 && (_baseScore == 3 || _baseScore == 5))
+			_scoreScale = 10;
 		if (_roundCount < 0)
 			_roundCount = 0;
 		if (_autoPlayTimeout < 5000)

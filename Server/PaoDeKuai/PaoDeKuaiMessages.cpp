@@ -28,6 +28,7 @@ namespace NiuMa
 		, playerCount(2)
 		, level(0)
 		, baseScore(1)
+		, scoreScale(1)
 		, roundCount(8)
 		, bombCount(0)
 		, multiplier(1)
@@ -42,6 +43,7 @@ namespace NiuMa
 		, banker(0)
 		, roundCount(8)
 		, baseScore(1)
+		, scoreScale(1)
 	{}
 
 	MsgPaoDeKuaiPlayNotify::MsgPaoDeKuaiPlayNotify()
@@ -57,15 +59,22 @@ namespace NiuMa
 		, roundNo(0)
 		, roundCount(8)
 		, baseScore(1)
+		, scoreScale(1)
 		, bombCount(0)
 		, multiplier(1)
 		, spring(false)
+		, zhaNiao(false)
+		, birdHit(false)
+		, birdSeat(-1)
+		, birdMultiplier(1)
 		, roomFeeTotal(0)
 		, shuffleFeeTotal(0)
 	{
 		for (int i = 0; i < 2; i++) {
 			scores[i] = 0;
 			winGolds[i] = 0;
+			bombScores[i] = 0;
+			bombWinCounts[i] = 0;
 		}
 	}
 

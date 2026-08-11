@@ -98,6 +98,9 @@ namespace NiuMa
 		// 底注
 		int baseScore;
 
+		// 积分显示倍率，10表示服务端整数1按0.1积分展示
+		int scoreScale;
+
 		// 总局数
 		int roundCount;
 
@@ -115,7 +118,7 @@ namespace NiuMa
 
 		MSGPACK_DEFINE_MAP(gameState, currentPlayer, mySeat, myCards, lastPlayCards,
 			lastPlaySeat, lastPlayGenre, isFirstPlay, roundNo, banker, playerCount,
-			number, level, baseScore, roundCount, bombCount, multiplier, remainCounts, avatars);
+			number, level, baseScore, scoreScale, roundCount, bombCount, multiplier, remainCounts, avatars);
 	};
 
 	/**
@@ -172,7 +175,10 @@ namespace NiuMa
 		// 底注
 		int baseScore;
 
-		MSGPACK_DEFINE_MAP(cards, firstPlayer, roundNo, banker, roundCount, baseScore);
+		// 积分显示倍率
+		int scoreScale;
+
+		MSGPACK_DEFINE_MAP(cards, firstPlayer, roundNo, banker, roundCount, baseScore, scoreScale);
 	};
 
 	/**
@@ -298,14 +304,36 @@ namespace NiuMa
 		// 底注
 		int baseScore;
 
+		// 积分显示倍率
+		int scoreScale;
+
 		// 炸弹数量
 		int bombCount;
 
 		// 结算倍数
 		int multiplier;
 
-			// 是否关门/春天
-			bool spring;
+		// 是否关门/春天
+		bool spring;
+
+		// 是否启用扎鸟
+		bool zhaNiao;
+
+		// 本局是否扎中红桃10
+		bool birdHit;
+
+		// 红桃10所在座位
+		int birdSeat;
+
+		// 扎鸟倍数
+		int birdMultiplier;
+
+		// 各玩家炸弹分
+		int bombScores[2];
+
+		// 各玩家得分炸弹次数
+		int bombWinCounts[2];
+
 			int64_t roomFeeTotal;
 			std::vector<std::string> roomFeePlayerIds;
 			std::vector<int64_t> roomFeeAmounts;
@@ -314,7 +342,8 @@ namespace NiuMa
 			std::vector<int64_t> shuffleFeeAmounts;
 
 			MSGPACK_DEFINE_MAP(winnerSeat, scores, winGolds, remainCards,
-				roundNo, roundCount, baseScore, bombCount, multiplier, spring,
+				roundNo, roundCount, baseScore, scoreScale, bombCount, multiplier, spring,
+				zhaNiao, birdHit, birdSeat, birdMultiplier, bombScores, bombWinCounts,
 				roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
 				shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
 		};

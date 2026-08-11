@@ -68,6 +68,9 @@ namespace NiuMa
 		// 获取底注
 		int getBaseScore() const { return _baseScore; }
 
+		// 获取积分显示倍率，10表示服务端整数1按0.1积分展示
+		int getScoreScale() const { return _scoreScale; }
+
 		// 获取总局数，0表示不限局数
 		int getRoundCount() const { return _roundCount; }
 
@@ -95,6 +98,9 @@ namespace NiuMa
 		// 有牌能大过上家时是否禁止过牌
 		bool getForcePlayIfCanBeat() const { return _forcePlayIfCanBeat; }
 
+		// 是否启用红桃10扎鸟
+		bool isZhaNiaoEnabled() const { return _zhaNiao; }
+
 		// 从JSON配置中加载
 		void loadConfig(const std::string& ruleConfig);
 
@@ -108,10 +114,13 @@ namespace NiuMa
 		// 底注
 		int _baseScore;
 
+		// 积分显示倍率
+		int _scoreScale;
+
 		// 总局数，0表示不限局数
 		int _roundCount;
 
-		// 炸弹翻倍
+		// 兼容旧配置；新跑得快炸弹按独立分结算
 		bool _bombDouble;
 
 		// 炸弹额外分数
@@ -134,6 +143,9 @@ namespace NiuMa
 
 		// 有大必出
 		bool _forcePlayIfCanBeat;
+
+		// 红桃10扎鸟
+		bool _zhaNiao;
 	};
 }
 

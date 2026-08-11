@@ -8,6 +8,7 @@ namespace NiuMa
 		: roundNo(0)
 		, banker(0)
 		, playerCount(2)
+		, scoreScale(1)
 	{
 		for (int i = 0; i < 2; i++) {
 			scores[i] = 0;

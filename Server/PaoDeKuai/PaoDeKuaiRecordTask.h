@@ -30,6 +30,9 @@ namespace NiuMa
 		// 全部玩家赢的金币数量
 		int64_t _winGolds[2];
 
+		// 积分显示倍率
+		int _scoreScale;
+
 		// 场地id
 		std::string _venueId;
 

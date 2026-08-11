@@ -35,6 +35,17 @@ namespace NiuMa
 					genre == static_cast<int>(PaoDeKuaiGenre::Rocket);
 			}
 
+			bool isHeartTen(const PokerCard& c)
+			{
+				return c.getPoint() == static_cast<int>(PokerPoint::Ten) &&
+					c.getSuit() == static_cast<int>(PokerSuit::Heart);
+			}
+
+			bool isZhaNiaoDistrict(int districtId)
+			{
+				return districtId == 28 || districtId == 52;
+			}
+
 			int64_t readRoomFeeAmount(const std::string& ruleConfig)
 			{
 				if (ruleConfig.empty())
@@ -81,6 +92,10 @@ namespace NiuMa
 		, _hasFirstPlayed(false)
 			, _bombCount(0)
 			, _multiplier(1)
+			, _birdMultiplier(1)
+			, _birdHit(false)
+			, _birdSeat(-1)
+			, _pendingBombSeat(-1)
 			, _spring(false)
 			, _roomFee(0)
 			, _autoPlayTime(0)
@@ -90,10 +105,15 @@ namespace NiuMa
 	{
 		_dissolveVotes[0] = 0;
 		_dissolveVotes[1] = 0;
+		for (int i = 0; i < 2; i++) {
+			_bombScoreDeltas[i] = 0;
+			_bombWinCounts[i] = 0;
+		}
 
 			// 加载规则配置
 			_rule->loadConfig(ruleConfig);
 			_roomFee = readRoomFeeAmount(ruleConfig);
+			_playback.scoreScale = _rule->getScoreScale();
 			setCashPledge(_rule->getBaseScore() * 8);
 		}
 
@@ -302,6 +322,14 @@ namespace NiuMa
 		_roundNo++;
 		_bombCount = 0;
 		_multiplier = 1;
+		_birdMultiplier = 1;
+		_birdHit = false;
+		_birdSeat = -1;
+		_pendingBombSeat = -1;
+		for (int i = 0; i < 2; i++) {
+			_bombScoreDeltas[i] = 0;
+			_bombWinCounts[i] = 0;
+		}
 		_spring = false;
 		_hasFirstPlayed = false;
 		_playback = PaoDeKuaiPlaybackData();
@@ -388,8 +416,37 @@ namespace NiuMa
 			for (auto& c : hand)
 				ids.push_back(c.getId());
 			_playback.initCards[idx] = ids;
+			if (isZhaNiaoEnabled()) {
+				for (const PokerCard& c : hand) {
+					if (isHeartTen(c)) {
+						_birdHit = true;
+						_birdSeat = _si;
+						_birdMultiplier = 2;
+						break;
+					}
+				}
+			}
 			idx++;
 		}
+	}
+
+	bool PaoDeKuaiRoom::isZhaNiaoEnabled() const {
+		return (_rule && _rule->isZhaNiaoEnabled()) || isZhaNiaoDistrict(_districtId);
+	}
+
+	void PaoDeKuaiRoom::finalizePendingBomb() {
+		if (_pendingBombSeat < 0 || _pendingBombSeat >= 2)
+			return;
+		int baseScore = _rule ? _rule->getBaseScore() : 1;
+		int bombUnit = _rule ? _rule->getBombScore() : 10;
+		if (bombUnit <= 0)
+			bombUnit = 10;
+		int bombScore = baseScore * bombUnit;
+		int opponent = getNextSeat(_pendingBombSeat);
+		_bombScoreDeltas[_pendingBombSeat] += bombScore;
+		_bombScoreDeltas[opponent] -= bombScore;
+		_bombWinCounts[_pendingBombSeat]++;
+		_pendingBombSeat = -1;
 	}
 
 	void PaoDeKuaiRoom::nextPlayer() {
@@ -397,6 +454,7 @@ namespace NiuMa
 
 		// 如果轮回到上一次出牌的人，说明其他人都过牌了
 		if (_currentPlayer == _lastPlaySeat) {
+			finalizePendingBomb();
 			_isFirstPlay = true;
 			_lastPlayGenre.clear();
 			_lastPlaySeat = -1;
@@ -565,8 +623,7 @@ namespace NiuMa
 		// 炸弹计数
 		if (isPaoDeKuaiBombGenre(genre.getGenre())) {
 			_bombCount++;
-			if (_rule->getBombDouble())
-				_multiplier *= 2;
+			_pendingBombSeat = seat;
 		}
 
 		// 记录回放步骤
@@ -683,37 +740,58 @@ namespace NiuMa
 	}
 
 		void PaoDeKuaiRoom::calculateScores(int winnerSeat) {
+		finalizePendingBomb();
 		int baseScore = _rule->getBaseScore();
-		int multiplier = _multiplier;
+		int scoreScale = _rule->getScoreScale();
+		int multiplier = _birdMultiplier;
 		int loserSeat = getNextSeat(winnerSeat);
 		auto loser = getAvatar(loserSeat);
 		int loserCards = loser ? loser->getCardNums() : 0;
+		int scoreCards = loserCards;
 		_spring = (loser != nullptr && !loser->isPlayed() && loserCards >= _rule->getCardCount());
-		if (_spring && _rule->getSpringDouble())
-			multiplier *= 2;
+		if (loserCards == 1)
+			scoreCards = 0;
+		else if (_spring)
+			scoreCards = 30;
 
-		int loserScore = loserCards * baseScore * multiplier;
+		int64_t cardScore = static_cast<int64_t>(scoreCards) * baseScore * multiplier;
 		int maxScore = _rule->getMaxRoundScore();
-		if (maxScore > 0 && loserScore > maxScore)
-			loserScore = maxScore;
-		if (loser)
-			loserScore = static_cast<int>(std::min<int64_t>(loserScore, std::max<int64_t>(0LL, loser->getCashPledge())));
+		if (maxScore > 0 && cardScore > maxScore)
+			cardScore = maxScore;
 		_multiplier = multiplier;
+
+		int64_t roundDeltas[2] = {0, 0};
+		roundDeltas[winnerSeat] += cardScore;
+		roundDeltas[loserSeat] -= cardScore;
+		for (int _si = 0; _si < 2; _si++)
+			roundDeltas[_si] += _bombScoreDeltas[_si];
+
+		for (int _si = 0; _si < 2; _si++) {
+			if (roundDeltas[_si] >= 0)
+				continue;
+			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+			int64_t cashPledge = avatar ? std::max<int64_t>(0LL, avatar->getCashPledge()) : 0LL;
+			int64_t loss = -roundDeltas[_si];
+			if (loss <= cashPledge)
+				continue;
+			int opponent = getNextSeat(_si);
+			int64_t overflow = loss - cashPledge;
+			roundDeltas[_si] = -cashPledge;
+			roundDeltas[opponent] -= overflow;
+		}
 
 		for (int _si = 0; _si < 2; _si++) {
 			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
 			if (!avatar)
 				continue;
+			int roundScore = static_cast<int>(roundDeltas[_si]);
+			avatar->setRoundScore(roundScore);
+			avatar->setWinGold(static_cast<int64_t>(roundScore));
+			avatar->setTotalScore(avatar->getTotalScore() + roundScore);
 			if (_si == winnerSeat) {
-				avatar->setRoundScore(loserScore);
-				avatar->setWinGold(static_cast<int64_t>(loserScore));
-				avatar->setTotalScore(avatar->getTotalScore() + loserScore);
 				incWinNum(avatar->getPlayerId());
 			}
 			else {
-				avatar->setRoundScore(-loserScore);
-				avatar->setWinGold(-static_cast<int64_t>(loserScore));
-				avatar->setTotalScore(avatar->getTotalScore() - loserScore);
 				incLoseNum(avatar->getPlayerId());
 			}
 		}
@@ -732,9 +810,20 @@ namespace NiuMa
 		settlement["winnerSeat"] = winnerSeat;
 		settlement["loserSeat"] = loserSeat;
 		settlement["loserCards"] = loserCards;
+		settlement["scoreCards"] = scoreCards;
 		settlement["baseScore"] = baseScore;
+		settlement["scoreScale"] = scoreScale;
 		settlement["bombCount"] = _bombCount;
 		settlement["multiplier"] = _multiplier;
+		settlement["zhaNiao"] = isZhaNiaoEnabled();
+		settlement["birdHit"] = _birdHit;
+		settlement["birdSeat"] = _birdSeat;
+		settlement["birdMultiplier"] = _birdMultiplier;
+		settlement["cardScore"] = static_cast<Json::Int64>(cardScore);
+		settlement["bombScores"][0] = _bombScoreDeltas[0];
+		settlement["bombScores"][1] = _bombScoreDeltas[1];
+		settlement["bombWinCounts"][0] = _bombWinCounts[0];
+		settlement["bombWinCounts"][1] = _bombWinCounts[1];
 		settlement["spring"] = _spring;
 		_playback.settlement = settlement.toStyledString();
 	}
@@ -744,6 +833,7 @@ namespace NiuMa
 		task->_venueId = getId();
 		task->_roundNo = _roundNo;
 		task->_banker = _banker;
+		task->_scoreScale = _rule ? _rule->getScoreScale() : 1;
 
 		// 生成随机种子hash
 		_playback.randomSeedHash = ReplayUtils::generateSeedHash(getId(), _roundNo, _banker);
@@ -872,6 +962,7 @@ namespace NiuMa
 		resp->number = _number;
 		resp->level = _level;
 		resp->baseScore = _rule->getBaseScore();
+		resp->scoreScale = _rule->getScoreScale();
 		resp->roundCount = _rule->getRoundCount();
 		resp->bombCount = _bombCount;
 		resp->multiplier = _multiplier;
@@ -1099,9 +1190,18 @@ namespace NiuMa
 			settlement.roundNo = _roundNo;
 			settlement.roundCount = _rule ? _rule->getRoundCount() : 0;
 			settlement.baseScore = _rule->getBaseScore();
+			settlement.scoreScale = _rule->getScoreScale();
 			settlement.bombCount = _bombCount;
 			settlement.multiplier = _multiplier;
 			settlement.spring = _spring;
+			settlement.zhaNiao = isZhaNiaoEnabled();
+			settlement.birdHit = _birdHit;
+			settlement.birdSeat = _birdSeat;
+			settlement.birdMultiplier = _birdMultiplier;
+			for (int _si = 0; _si < 2; _si++) {
+				settlement.bombScores[_si] = _bombScoreDeltas[_si];
+				settlement.bombWinCounts[_si] = _bombWinCounts[_si];
+			}
 			calcRoomFeeSettlementData(_roomFee, netWins,
 				settlement.roomFeeTotal, settlement.roomFeePlayerIds, settlement.roomFeeAmounts);
 			getShuffleFeeSettlementData(settlement.shuffleFeeTotal,
@@ -1153,6 +1253,7 @@ namespace NiuMa
 		msg->banker = _banker;
 		msg->roundCount = _rule->getRoundCount();
 		msg->baseScore = _rule->getBaseScore();
+		msg->scoreScale = _rule->getScoreScale();
 
 		sendMessage(*msg, playerId);
 	}
@@ -1175,9 +1276,14 @@ namespace NiuMa
 		msg->roundNo = _roundNo;
 		msg->roundCount = _rule->getRoundCount();
 		msg->baseScore = _rule->getBaseScore();
+		msg->scoreScale = _rule->getScoreScale();
 		msg->bombCount = _bombCount;
 		msg->multiplier = _multiplier;
 		msg->spring = _spring;
+		msg->zhaNiao = isZhaNiaoEnabled();
+		msg->birdHit = _birdHit;
+		msg->birdSeat = _birdSeat;
+		msg->birdMultiplier = _birdMultiplier;
 
 		for (int _si = 0; _si < 2; _si++) {
 			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
@@ -1185,6 +1291,8 @@ namespace NiuMa
 				continue;
 			msg->scores[_si] = avatar->getRoundScore();
 			msg->winGolds[_si] = avatar->getWinGold();
+			msg->bombScores[_si] = _bombScoreDeltas[_si];
+			msg->bombWinCounts[_si] = _bombWinCounts[_si];
 			// 剩余手牌
 			const CardArray& cards = avatar->getCards();
 			for (auto& c : cards)

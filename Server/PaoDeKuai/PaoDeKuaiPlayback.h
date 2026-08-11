@@ -73,11 +73,14 @@ namespace NiuMa
 		// 各玩家赢的金币
 		int64_t winGolds[2];
 
+		// 积分显示倍率
+		int scoreScale;
+
 		// 结算信息
 		std::string settlement;
 
 		MSGPACK_DEFINE_MAP(venueId, roundNo, banker, playerCount, playerIds, initCards,
-			randomSeedHash, steps, scores, winGolds, settlement);
+			randomSeedHash, steps, scores, winGolds, scoreScale, settlement);
 	};
 }
 
