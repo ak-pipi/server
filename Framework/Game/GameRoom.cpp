@@ -18,54 +18,66 @@
 #include <boost/locale.hpp>
 #include <cerrno>
 #include <cstdlib>
+#include <cmath>
+#include <iomanip>
 #include <memory>
 #include <sstream>
 
 namespace NiuMa
 {
-		namespace {
-			int64_t readCarryScoreFromBase64(const std::string& base64) {
-				if (base64.empty())
-					return 0LL;
-			std::string json;
-			if (!BaseUtils::decodeBase64(base64, json))
-				return -1LL;
+			namespace {
+				double normalizeOneDecimal(double value) {
+					return std::round(value * 10.0) / 10.0;
+				}
+
+				std::string formatOneDecimal(double value) {
+					std::ostringstream oss;
+					oss << std::fixed << std::setprecision(1) << normalizeOneDecimal(value);
+					return oss.str();
+				}
+
+				double readCarryScoreFromBase64(const std::string& base64) {
+					if (base64.empty())
+						return 0.0;
+				std::string json;
+				if (!BaseUtils::decodeBase64(base64, json))
+					return -1.0;
 
 			Json::Value root;
 			Json::CharReaderBuilder builder;
 			std::string errs;
-			std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
-			if (!reader->parse(json.data(), json.data() + json.size(), &root, &errs))
-				return -1LL;
+				std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+				if (!reader->parse(json.data(), json.data() + json.size(), &root, &errs))
+					return -1.0;
 
 			Json::Value value = root["carryScore"];
-			if (value.isNull())
-				value = root["carry_score"];
-			if (value.isNull())
-				return 0LL;
-				if (value.isInt64() || value.isUInt64() || value.isInt() || value.isUInt())
-					return value.asInt64();
-				if (value.isString()) {
-					std::string text = value.asString();
-					if (text.empty())
-						return -1LL;
-					char* end = nullptr;
-					errno = 0;
-					long long score = std::strtoll(text.c_str(), &end, 10);
-					if ((errno != 0) || (end == text.c_str()) || (*end != '\0'))
-						return -1LL;
-					return static_cast<int64_t>(score);
+				if (value.isNull())
+					value = root["carry_score"];
+				if (value.isNull())
+					return 0.0;
+					if (value.isNumeric())
+						return normalizeOneDecimal(value.asDouble());
+					if (value.isString()) {
+						std::string text = value.asString();
+						if (text.empty())
+							return -1.0;
+						char* end = nullptr;
+						errno = 0;
+						double score = std::strtod(text.c_str(), &end);
+						if ((errno != 0) || (end == text.c_str()) || (*end != '\0'))
+							return -1.0;
+						return normalizeOneDecimal(score);
+					}
+					return -1.0;
 				}
-				return -1LL;
-			}
 
-			bool addGoldBack(const std::string& playerId, int64_t amount) {
-				if (playerId.empty() || amount <= 0LL)
-					return true;
-				std::stringstream ss;
-				ss << "update `capital` set `gold` = `gold` + " << amount
-					<< ", `version` = `version` + 1 where `player_id` = \""
-					<< playerId << "\"";
+				bool addGoldBack(const std::string& playerId, double amount) {
+					if (playerId.empty() || amount <= 0.0)
+						return true;
+					std::stringstream ss;
+					ss << "update `capital` set `gold` = `gold` + " << formatOneDecimal(amount)
+						<< ", `version` = `version` + 1 where `player_id` = \""
+						<< playerId << "\"";
 				std::shared_ptr<MysqlCommonTask> task = std::make_shared<MysqlCommonTask>(ss.str(), MysqlQueryTask::QueryType::Update);
 				MysqlPool::getSingleton().syncQuery(task);
 				return task->getSucceed() && task->getAffectedRecords() > 0;
@@ -100,13 +112,13 @@ namespace NiuMa
 		return _maxPlayerNums;
 	}
 
-	int64_t GameRoom::getCashPledge() const {
-		return _cashPledge;
-	}
+		double GameRoom::getCashPledge() const {
+			return _cashPledge;
+		}
 
-	void GameRoom::setCashPledge(int64_t cashPledge) {
-		_cashPledge = cashPledge;
-	}
+		void GameRoom::setCashPledge(double cashPledge) {
+			_cashPledge = cashPledge;
+		}
 
 	int64_t GameRoom::getDiamondNeed() const {
 		return _diamondNeed;
@@ -349,22 +361,22 @@ namespace NiuMa
 	bool GameRoom::joinGame(int seat, const std::string& playerId, const std::string& base64, std::string& errMsg, bool robot) {
 		if (!checkJoin(seat, playerId, errMsg))
 			return false;
-		int64_t carryScore = readCarryScoreFromBase64(base64);
-		if (carryScore < 0LL) {
-			errMsg = "携带积分参数错误";
-			return false;
-		}
-		int64_t targetCashPledge = _cashPledge;
-		if (carryScore > 0LL) {
-			if (carryScore < _cashPledge) {
-				errMsg = std::string("携带积分不足，最低需要") + std::to_string(_cashPledge) + std::string("积分");
+			double carryScore = readCarryScoreFromBase64(base64);
+			if (carryScore < 0.0) {
+				errMsg = "携带积分参数错误";
 				return false;
 			}
-			targetCashPledge = carryScore;
-		}
-		// 当前已经预扣初的押金数量
-		int64_t cashPledge = 0LL;
-		if ((targetCashPledge > 0) || (_diamondNeed > 0)) {
+			double targetCashPledge = _cashPledge;
+			if (carryScore > 0.0) {
+				if (carryScore < _cashPledge) {
+					errMsg = std::string("携带积分不足，最低需要") + formatOneDecimal(_cashPledge) + std::string("积分");
+					return false;
+				}
+				targetCashPledge = carryScore;
+			}
+			// 当前已经预扣初的押金数量
+			double cashPledge = 0.0;
+			if ((targetCashPledge > 0) || (_diamondNeed > 0)) {
 			// 检查是否有足够金币预扣押金，以及是否有足够的钻石数量用于扣除
 			if (targetCashPledge > 0) {
 				// 查询当前已经预扣初的押金数量
@@ -378,8 +390,8 @@ namespace NiuMa
 				if (task1->getRows() > 0)
 					cashPledge = task1->getAmount();
 			}
-			int64_t gold = 0LL;
-			int64_t diamond = 0LL;
+				double gold = 0.0;
+				int64_t diamond = 0LL;
 			std::shared_ptr<GetCapitalTask> task2;
 			if ((cashPledge < targetCashPledge) || (_diamondNeed > 0)) {
 				task2 = std::make_shared<GetCapitalTask>(playerId);
@@ -389,29 +401,29 @@ namespace NiuMa
 					ErrorS << "玩家(Id: " << playerId << ")加入游戏(Id: " << getId() << ")：查询资产失败";
 					return false;
 				}
-				if (task2->getRows() > 0) {
-					gold = task2->getGold();
-					diamond = task2->getDiamond();
+					if (task2->getRows() > 0) {
+						gold = task2->getGold();
+						diamond = task2->getDiamond();
 				}
 			}
 			if ((_diamondNeed > 0) && (diamond < _diamondNeed)) {
 				errMsg = std::string("钻石不足，最低需要") + std::to_string(_diamondNeed) + std::string("枚钻石");
 				return false;
 			}
-			if (cashPledge < targetCashPledge) {
-				int64_t delta = targetCashPledge - cashPledge;
-				cashPledge = targetCashPledge;
-				if (gold < delta) {
-					// 金币不足
-					errMsg = std::string("金币不足，本次携带需要") + std::to_string(targetCashPledge) + std::string("金币");
-					return false;
-				}
-				// 预扣除押金
-				gold -= delta;
-				std::stringstream ss;
-				ss << "update `capital` set `gold` = " << gold
-					<< ", `version` = `version` + 1 where `player_id` = \""
-					<< playerId << "\" and `version` = " << task2->getVersion();
+				if (cashPledge < targetCashPledge) {
+					double delta = normalizeOneDecimal(targetCashPledge - cashPledge);
+					cashPledge = targetCashPledge;
+					if (gold < delta) {
+						// 金币不足
+						errMsg = std::string("金币不足，本次携带需要") + formatOneDecimal(targetCashPledge) + std::string("金币");
+						return false;
+					}
+					// 预扣除押金
+					gold = normalizeOneDecimal(gold - delta);
+					std::stringstream ss;
+					ss << "update `capital` set `gold` = " << formatOneDecimal(gold)
+						<< ", `version` = `version` + 1 where `player_id` = \""
+						<< playerId << "\" and `version` = " << task2->getVersion();
 				std::string sql = ss.str();
 				std::shared_ptr<MysqlCommonTask> task3 = std::make_shared<MysqlCommonTask>(sql, MysqlQueryTask::QueryType::Update);
 				MysqlPool::getSingleton().syncQuery(task3);
@@ -648,7 +660,7 @@ namespace NiuMa
 			return false;
 		}
 		bool flag = false;
-		int64_t cashPledge = 0LL;
+			double cashPledge = 0.0;
 		if (task1->getRows() > 0) {
 			flag = true;
 			cashPledge = task1->getAmount();
@@ -663,8 +675,8 @@ namespace NiuMa
 			ErrorS << "删除押金记录失败，场地Id: " << getId() << ", 玩家Id: " << playerId;
 			return false;
 		}
-		if (cashPledge <= 0)
-			return true;
+			if (cashPledge <= 0.0)
+				return true;
 		// 更新金币数量，循环多次以应对可能的数据库冲突的情况
 		for (int i = 0; i < 10; i++) {
 				std::shared_ptr<GetCapitalTask> task2 = std::make_shared<GetCapitalTask>(playerId);
@@ -675,14 +687,14 @@ namespace NiuMa
 						ErrorS << "返还押金失败后恢复押金记录失败，场地Id: " << getId() << ", 玩家Id: " << playerId << ", 押金数量: " << cashPledge;
 					return false;
 				}
-			int64_t gold = 0LL;
-			if (task2->getRows() > 0)
-				gold = task2->getGold();
-			gold += cashPledge;
-			ss.str("");
-			ss << "update `capital` set `gold` = " << gold
-				<< ", `version` = `version` + 1 where `player_id` = \""
-				<< playerId << "\" and `version` = " << task2->getVersion();
+				double gold = 0.0;
+				if (task2->getRows() > 0)
+					gold = task2->getGold();
+				gold = normalizeOneDecimal(gold + cashPledge);
+				ss.str("");
+				ss << "update `capital` set `gold` = " << formatOneDecimal(gold)
+					<< ", `version` = `version` + 1 where `player_id` = \""
+					<< playerId << "\" and `version` = " << task2->getVersion();
 			sql = ss.str();
 			std::shared_ptr<MysqlCommonTask> task3 = std::make_shared<MysqlCommonTask>(sql, MysqlQueryTask::QueryType::Update);
 			MysqlPool::getSingleton().syncQuery(task3);
@@ -701,9 +713,9 @@ namespace NiuMa
 			return false;
 		}
 
-	bool GameRoom::updateCashPledge(const std::string& playerId, int64_t cashPledge) const {
-		std::stringstream ss;
-		std::string sql;
+		bool GameRoom::updateCashPledge(const std::string& playerId, double cashPledge) const {
+			std::stringstream ss;
+			std::string sql;
 		ss << "select count(*) from `cash_pledge` where `player_id` = \"" << playerId << "\" and `venue_id` = \"" << getId() << "\"";
 		sql = ss.str();
 		std::shared_ptr<MysqlCountTask> countTask = std::make_shared<MysqlCountTask>(sql);
@@ -715,16 +727,16 @@ namespace NiuMa
 		int count = countTask->getCount();
 		std::shared_ptr<MysqlCommonTask> task;
 		ss.str("");
-		if (cashPledge > 0) {
-			if (count == 0) {
-				ss << "insert into `cash_pledge`(`player_id`, `venue_id`, `amount`, `time`) values(\"" << playerId << "\", \"" << getId() << "\", " << cashPledge << ", now())";
-				sql = ss.str();
-				task = std::make_shared<MysqlCommonTask>(sql, MysqlQueryTask::QueryType::Insert);
-			}
-			else {
-				ss << "update `cash_pledge` set `amount` = " << cashPledge << ", `time` = now() where `player_id` = \"" << playerId << "\" and `venue_id` = \"" << getId() << "\"";
-				sql = ss.str();
-				task = std::make_shared<MysqlCommonTask>(sql, MysqlQueryTask::QueryType::Update);
+			if (cashPledge > 0.0) {
+				if (count == 0) {
+					ss << "insert into `cash_pledge`(`player_id`, `venue_id`, `amount`, `time`) values(\"" << playerId << "\", \"" << getId() << "\", " << formatOneDecimal(cashPledge) << ", now())";
+					sql = ss.str();
+					task = std::make_shared<MysqlCommonTask>(sql, MysqlQueryTask::QueryType::Insert);
+				}
+				else {
+					ss << "update `cash_pledge` set `amount` = " << formatOneDecimal(cashPledge) << ", `time` = now() where `player_id` = \"" << playerId << "\" and `venue_id` = \"" << getId() << "\"";
+					sql = ss.str();
+					task = std::make_shared<MysqlCommonTask>(sql, MysqlQueryTask::QueryType::Update);
 			}
 		}
 		else {

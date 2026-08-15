@@ -10,7 +10,7 @@ namespace NiuMa {
 		, _robot(robot)
 		, _seat(-1)
 		, _gold(0LL)
-		, _cashPledge(0LL)
+		, _cashPledge(0.0)
 		, _authorize(false)
 		, _ready(false)
 		, _latitude(0.0f)
@@ -80,11 +80,11 @@ namespace NiuMa {
 		_gold = gold;
 	}
 
-	int64_t GameAvatar::getCashPledge() const {
+	double GameAvatar::getCashPledge() const {
 		return _cashPledge;
 	}
 
-	void GameAvatar::setCashPledge(int64_t s) {
+	void GameAvatar::setCashPledge(double s) {
 		_cashPledge = s;
 	}
 

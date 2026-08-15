@@ -7,7 +7,6 @@
 #include "PaoDeKuaiMessages.h"
 #include "Game/ReplayUtils.h"
 #include "Game/GetCapitalTask.h"
-#include "Game/WalletEventTask.h"
 #include "Game/DebtLiquidation.h"
 #include "PaoDeKuaiRecordTask.h"
 #include "Game/RiskControlCollector.h"
@@ -23,6 +22,7 @@
 #include <algorithm>
 #include <climits>
 #include <chrono>
+#include <cmath>
 #include <sstream>
 
 namespace NiuMa
@@ -46,6 +46,27 @@ namespace NiuMa
 				return districtId == 28 || districtId == 52;
 			}
 
+			int64_t resolvePaoDeKuaiMinCarryScore(int baseScore, int roundCount, bool zhaNiao)
+			{
+				if (roundCount == 1) {
+					if (baseScore == 50)
+						return 300;
+					if (baseScore == 100)
+						return 600;
+				}
+				else if (roundCount == 8) {
+					if (baseScore == 3)
+						return 30;
+					if (baseScore == 5)
+						return 50;
+					if (baseScore == 10)
+						return zhaNiao ? 200 : 100;
+					if (baseScore == 20)
+						return 400;
+				}
+				return static_cast<int64_t>(baseScore) * 8;
+			}
+
 			int64_t readRoomFeeAmount(const std::string& ruleConfig)
 			{
 				if (ruleConfig.empty())
@@ -66,6 +87,35 @@ namespace NiuMa
 				if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
 					return root["room_fee_type"].asInt();
 				return 0;
+			}
+
+			int64_t readMinCarryScore(const std::string& ruleConfig, int64_t fallback)
+			{
+				if (ruleConfig.empty())
+					return fallback;
+				Json::Value root;
+				Json::CharReaderBuilder builder;
+				Json::CharReader* reader = builder.newCharReader();
+				std::string errs;
+				if (!reader->parse(ruleConfig.c_str(), ruleConfig.c_str() + ruleConfig.size(), &root, &errs)) {
+					delete reader;
+					return fallback;
+				}
+				delete reader;
+				const char* keys[] = {"min_carry_score", "minCarryScore"};
+				for (const char* key : keys) {
+					if (!root.isMember(key))
+						continue;
+					const Json::Value& value = root[key];
+					int64_t score = 0;
+					if (value.isInt64() || value.isInt())
+						score = value.asInt64();
+					else if (value.isUInt64() || value.isUInt())
+						score = static_cast<int64_t>(value.asUInt64());
+					if (score > 0)
+						return score;
+				}
+				return fallback;
 			}
 		}
 
@@ -96,12 +146,13 @@ namespace NiuMa
 			, _birdHit(false)
 			, _birdSeat(-1)
 			, _pendingBombSeat(-1)
-			, _spring(false)
+				, _spring(false)
 			, _roomFee(0)
 			, _autoPlayTime(0)
 			, _dissolveRequested(false)
 			, _dissolveRequester(-1)
 			, _dissolveTick(0)
+			, _roomScoreboardRecorded(false)
 	{
 		_dissolveVotes[0] = 0;
 		_dissolveVotes[1] = 0;
@@ -114,7 +165,9 @@ namespace NiuMa
 			_rule->loadConfig(ruleConfig);
 			_roomFee = readRoomFeeAmount(ruleConfig);
 			_playback.scoreScale = _rule->getScoreScale();
-			setCashPledge(_rule->getBaseScore() * 8);
+			int64_t minCarryScore = resolvePaoDeKuaiMinCarryScore(
+				_rule->getBaseScore(), _rule->getRoundCount(), isZhaNiaoEnabled());
+			setCashPledge(readMinCarryScore(ruleConfig, minCarryScore));
 		}
 
 	PaoDeKuaiRoom::~PaoDeKuaiRoom() {}
@@ -145,13 +198,13 @@ namespace NiuMa
 	void PaoDeKuaiRoom::getAvatarExtraInfo(const GameAvatar::Ptr& avatar, std::string& base64) const {
 		std::shared_ptr<GetCapitalTask> task = std::make_shared<GetCapitalTask>(avatar->getPlayerId());
 		MysqlPool::getSingleton().syncQuery(task);
-		int64_t gold = avatar->getCashPledge();
-		int64_t diamond = 0LL;
+			double gold = avatar->getCashPledge();
+			int64_t diamond = 0LL;
 		if (task->getSucceed() && task->getRows() > 0) {
 			diamond = task->getDiamond();
 		}
 		Json::Value tmp(Json::objectValue);
-		tmp["gold"] = static_cast<Json::Int64>(gold);
+			tmp["gold"] = gold;
 		tmp["diamond"] = static_cast<Json::Int64>(diamond);
 		if (!avatar->isOffline()) {
 			Session::Ptr session = avatar->getSession();
@@ -187,11 +240,13 @@ namespace NiuMa
 		_isFirstPlay = true;
 		_hasFirstPlayed = false;
 		_bombCount = 0;
+		_pendingBombSeat = -1;
 		_multiplier = 1;
 		_spring = false;
 		_dissolveRequested = false;
 		_dissolveRequester = -1;
 		_dissolveTick = 0;
+		_roomScoreboardRecorded = false;
 		_dissolveVotes[0] = 0;
 		_dissolveVotes[1] = 0;
 		_playback = PaoDeKuaiPlaybackData();
@@ -326,7 +381,7 @@ namespace NiuMa
 		_birdHit = false;
 		_birdSeat = -1;
 		_pendingBombSeat = -1;
-		for (int i = 0; i < 2; i++) {
+			for (int i = 0; i < 2; i++) {
 			_bombScoreDeltas[i] = 0;
 			_bombWinCounts[i] = 0;
 		}
@@ -438,10 +493,7 @@ namespace NiuMa
 		if (_pendingBombSeat < 0 || _pendingBombSeat >= 2)
 			return;
 		int baseScore = _rule ? _rule->getBaseScore() : 1;
-		int bombUnit = _rule ? _rule->getBombScore() : 10;
-		if (bombUnit <= 0)
-			bombUnit = 10;
-		int bombScore = baseScore * bombUnit;
+		int bombScore = baseScore * 10;
 		int opponent = getNextSeat(_pendingBombSeat);
 		_bombScoreDeltas[_pendingBombSeat] += bombScore;
 		_bombScoreDeltas[opponent] -= bombScore;
@@ -603,9 +655,9 @@ namespace NiuMa
 			step.timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 			_playback.steps.push_back(step);
 
-			// 通知
-			notifyPlay(seat, cardIds, 0, getNextSeat(seat));
 			nextPlayer();
+			// 通知。过牌后同步下一位出牌玩家。
+			notifyPlay(seat, cardIds, 0, _currentPlayer);
 			return PlayResult::OK;
 		}
 
@@ -666,44 +718,30 @@ namespace NiuMa
 		calculateScores(winnerSeat);
 
 		bool finishRoom = (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount());
-		for (int _si = 0; _si < 2; _si++) {
-			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
-			if (!avatar)
-				continue;
-			int64_t cashPledge = avatar->getCashPledge() + avatar->getWinGold();
-			if (cashPledge < 0)
-				cashPledge = 0;
-			if (updateCashPledge(avatar->getPlayerId(), cashPledge))
-				avatar->setCashPledge(cashPledge);
-			else
-				finishRoom = true;
-			if (avatar->getCashPledge() <= 0)
-				finishRoom = true;
-		}
+			int scoreScale = _rule ? _rule->getScoreScale() : 1;
+			if (scoreScale <= 0)
+				scoreScale = 1;
+			for (int _si = 0; _si < 2; _si++) {
+				auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+				if (!avatar)
+					continue;
+				double cashPledge = avatar->getCashPledge() +
+					static_cast<double>(avatar->getWinGold()) / static_cast<double>(scoreScale);
+				if (cashPledge < 0.0)
+					cashPledge = 0.0;
+				if (updateCashPledge(avatar->getPlayerId(), cashPledge))
+					avatar->setCashPledge(cashPledge);
+				else
+					finishRoom = true;
+				if (avatar->getCashPledge() <= 0.0)
+					finishRoom = true;
+			}
 
-		// 通知结算
-		notifySettlement(winnerSeat);
+			// 通知结算
+			notifySettlement(winnerSeat, finishRoom);
 
 		// 保存回放记录
 		saveRoundRecord();
-
-		// 发送积分变动MQ事件
-		for (int _si = 0; _si < 2; _si++) {
-			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
-			if (!avatar)
-				continue;
-			int64_t winGold = avatar->getWinGold();
-			if (winGold > 0) {
-				WalletEventTask::publish(
-					avatar->getPlayerId(), "GAME_WIN", winGold,
-					"PaoDeKuai", getId(), "跑得快赢得金币");
-			}
-			else if (winGold < 0) {
-				WalletEventTask::publish(
-					avatar->getPlayerId(), "GAME_LOSE", -winGold,
-					"PaoDeKuai", getId(), "跑得快输掉金币");
-			}
-		}
 
 		// 重置准备状态
 		for (int _si = 0; _si < 2; _si++) {
@@ -717,6 +755,7 @@ namespace NiuMa
 		_banker = winnerSeat;
 
 		if (finishRoom) {
+			recordFinalRoomScoreboard();
 			publishFinalRoomFee();
 			kickAllAvatars();
 			gameOver();
@@ -739,7 +778,25 @@ namespace NiuMa
 		publishRoomFeeOnGameOver(_roomFee, netWins, "PaoDeKuai", "跑得快整场房费");
 	}
 
-		void PaoDeKuaiRoom::calculateScores(int winnerSeat) {
+	void PaoDeKuaiRoom::recordFinalRoomScoreboard() {
+		if (_roomScoreboardRecorded || _roundNo <= 0)
+			return;
+		_roomScoreboardRecorded = true;
+		for (int _si = 0; _si < 2; _si++) {
+			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
+			if (!avatar)
+				continue;
+			int64_t totalScore = avatar->getTotalScore();
+			if (totalScore > 0)
+				incWinNum(avatar->getPlayerId());
+			else if (totalScore < 0)
+				incLoseNum(avatar->getPlayerId());
+			else
+				incDrawNum(avatar->getPlayerId());
+		}
+	}
+
+			void PaoDeKuaiRoom::calculateScores(int winnerSeat) {
 		finalizePendingBomb();
 		int baseScore = _rule->getBaseScore();
 		int scoreScale = _rule->getScoreScale();
@@ -747,12 +804,10 @@ namespace NiuMa
 		int loserSeat = getNextSeat(winnerSeat);
 		auto loser = getAvatar(loserSeat);
 		int loserCards = loser ? loser->getCardNums() : 0;
-		int scoreCards = loserCards;
-		_spring = (loser != nullptr && !loser->isPlayed() && loserCards >= _rule->getCardCount());
-		if (loserCards == 1)
-			scoreCards = 0;
-		else if (_spring)
-			scoreCards = 30;
+		_spring = false;
+		int scoreCards = 0;
+		if (loserCards > 1)
+			scoreCards = loserCards;
 
 		int64_t cardScore = static_cast<int64_t>(scoreCards) * baseScore * multiplier;
 		int maxScore = _rule->getMaxRoundScore();
@@ -770,7 +825,8 @@ namespace NiuMa
 			if (roundDeltas[_si] >= 0)
 				continue;
 			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
-			int64_t cashPledge = avatar ? std::max<int64_t>(0LL, avatar->getCashPledge()) : 0LL;
+				int64_t cashPledge = avatar ? static_cast<int64_t>(
+					std::llround(std::max(0.0, avatar->getCashPledge()) * scoreScale)) : 0LL;
 			int64_t loss = -roundDeltas[_si];
 			if (loss <= cashPledge)
 				continue;
@@ -788,12 +844,6 @@ namespace NiuMa
 			avatar->setRoundScore(roundScore);
 			avatar->setWinGold(static_cast<int64_t>(roundScore));
 			avatar->setTotalScore(avatar->getTotalScore() + roundScore);
-			if (_si == winnerSeat) {
-				incWinNum(avatar->getPlayerId());
-			}
-			else {
-				incLoseNum(avatar->getPlayerId());
-			}
 		}
 
 		// 记录到回放
@@ -973,6 +1023,9 @@ namespace NiuMa
 			if (!avatar)
 				continue;
 			resp->remainCounts[_si] = avatar->getCardNums();
+			resp->scores[_si] = avatar->getRoundScore();
+			resp->bombScores[_si] = _bombScoreDeltas[_si];
+			resp->bombWinCounts[_si] = _bombWinCounts[_si];
 			AvatarInfo info;
 			info.playerId = avatar->getPlayerId();
 			info.nickname = avatar->getNickname();
@@ -1178,6 +1231,7 @@ namespace NiuMa
 				int64_t totalScore = avatar->getTotalScore();
 				settlement.scores[_si] = static_cast<int>(totalScore);
 				settlement.winGolds[_si] = totalScore;
+				settlement.golds[_si] = avatar->getCashPledge();
 				const CardArray& cards = avatar->getCards();
 				for (auto& c : cards)
 					settlement.remainCards[_si].push_back(c.getId());
@@ -1206,10 +1260,12 @@ namespace NiuMa
 				settlement.roomFeeTotal, settlement.roomFeePlayerIds, settlement.roomFeeAmounts);
 			getShuffleFeeSettlementData(settlement.shuffleFeeTotal,
 				settlement.shuffleFeePlayerIds, settlement.shuffleFeeAmounts);
+			settlement.roomFinished = true;
 			sendMessageToAll(settlement);
 		}
 		MsgDisband msg;
 		sendMessageToAll(msg);
+		recordFinalRoomScoreboard();
 		publishFinalRoomFee();
 		kickAllAvatars();
 		gameOver();
@@ -1267,13 +1323,22 @@ namespace NiuMa
 		auto avatar = getAvatar(seat);
 		msg->remainCount = avatar ? avatar->getCardNums() : 0;
 		msg->multiplier = _multiplier;
+		msg->bombCount = _bombCount;
+		for (int _si = 0; _si < 2; _si++) {
+			auto pdkAvatar = getAvatar(_si);
+			if (!pdkAvatar)
+				continue;
+			msg->scores[_si] = pdkAvatar->getRoundScore();
+			msg->bombScores[_si] = _bombScoreDeltas[_si];
+			msg->bombWinCounts[_si] = _bombWinCounts[_si];
+		}
 		sendMessageToAll(*msg);
 	}
 
-	void PaoDeKuaiRoom::notifySettlement(int winnerSeat) {
-		auto msg = std::make_shared<MsgPaoDeKuaiSettlement>();
-		msg->winnerSeat = winnerSeat;
-		msg->roundNo = _roundNo;
+		void PaoDeKuaiRoom::notifySettlement(int winnerSeat, bool roomFinished) {
+			auto msg = std::make_shared<MsgPaoDeKuaiSettlement>();
+			msg->winnerSeat = winnerSeat;
+			msg->roundNo = _roundNo;
 		msg->roundCount = _rule->getRoundCount();
 		msg->baseScore = _rule->getBaseScore();
 		msg->scoreScale = _rule->getScoreScale();
@@ -1281,9 +1346,10 @@ namespace NiuMa
 		msg->multiplier = _multiplier;
 		msg->spring = _spring;
 		msg->zhaNiao = isZhaNiaoEnabled();
-		msg->birdHit = _birdHit;
-		msg->birdSeat = _birdSeat;
-		msg->birdMultiplier = _birdMultiplier;
+			msg->birdHit = _birdHit;
+			msg->birdSeat = _birdSeat;
+			msg->birdMultiplier = _birdMultiplier;
+			msg->roomFinished = roomFinished;
 
 		for (int _si = 0; _si < 2; _si++) {
 			auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
@@ -1291,6 +1357,7 @@ namespace NiuMa
 				continue;
 			msg->scores[_si] = avatar->getRoundScore();
 			msg->winGolds[_si] = avatar->getWinGold();
+			msg->golds[_si] = avatar->getCashPledge();
 			msg->bombScores[_si] = _bombScoreDeltas[_si];
 			msg->bombWinCounts[_si] = _bombWinCounts[_si];
 			// 剩余手牌
@@ -1298,9 +1365,9 @@ namespace NiuMa
 			for (auto& c : cards)
 				msg->remainCards[_si].push_back(c.getId());
 		}
-		if (_rule->getRoundCount() > 0 && _roundNo >= _rule->getRoundCount()) {
-			std::vector<std::pair<std::string, int64_t>> netWins;
-			for (int _si = 0; _si < 2; _si++) {
+			if (roomFinished) {
+				std::vector<std::pair<std::string, int64_t>> netWins;
+				for (int _si = 0; _si < 2; _si++) {
 				auto avatar = std::dynamic_pointer_cast<PaoDeKuaiAvatar>(GameRoom::getAvatar(_si));
 				if (!avatar)
 					continue;

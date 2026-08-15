@@ -1321,6 +1321,8 @@ namespace NiuMa
 				_roomFee = root["room_fee_type"].asInt();
 		if (root.isMember("round_count") && root["round_count"].isInt())
 			_roundCount = root["round_count"].asInt();
+		if (_roundCount <= 0 || (_roundCount > 1 && _roundCount < 8))
+			_roundCount = 8;
 		if (root.isMember("allow_chi") && root["allow_chi"].isBool())
 			_allowChi = root["allow_chi"].asBool();
 		if (root.isMember("allow_peng") && root["allow_peng"].isBool())
@@ -1405,6 +1407,8 @@ bool TaoJiangMahjongRoom::shouldAllowDianPaoForAvatar(MahjongAvatar* pAvatar, co
 		return true;
 
 	bool detected = tjAvatar->detectHuStyle(false, mt, huTileAsWildcard);
+	if (!detected && tjAvatar->canMingZiDiHu(mt, false))
+		return true;
 	if (isYingZhuangHu(tjAvatar, mt, false))
 		return true;
 	if (!detected)
@@ -1423,10 +1427,14 @@ bool TaoJiangMahjongRoom::canCreateDianPaoOption(MahjongAvatar* pAvatar, const M
 	if (!pAvatar->canDianPao(mt, passed))
 		return false;
 	bool huTileAsWildcard = !isLaiZi(mt.getTile());
-	if (!canHuWithCandidate(pAvatar, mt, false, huTileAsWildcard))
-		return false;
-
 	TaoJiangMahjongAvatar* tjAvatar = dynamic_cast<TaoJiangMahjongAvatar*>(pAvatar);
+	bool specialDiHu = (tjAvatar != nullptr && tjAvatar->canMingZiDiHu(mt, false));
+	bool regularHu = canHuWithCandidate(pAvatar, mt, false, huTileAsWildcard);
+	if (!regularHu && !specialDiHu)
+		return false;
+	if (specialDiHu && !regularHu)
+		return true;
+
 	if (tjAvatar != nullptr) {
 		tjAvatar->detectHuStyle(false, mt, huTileAsWildcard);
 		if (isYingZhuangHu(tjAvatar, mt, false))
@@ -1615,21 +1623,12 @@ void TaoJiangMahjongRoom::dealTiles() {
 			if (_baoTinged[i])
 				avatar->addHuWay(MahjongGenre::HuWay::BaoTing);
 
-			bool yingZhuang = isYingZhuangHu(avatar, huTile, avatar->isZiMo());
+			bool zimo = avatar->isZiMo();
+			bool hasRegularHu = (avatar->getHuStyle() != 0);
+			addTaoJiangSpecialHuWays(avatar, huTile, zimo, hasRegularHu);
+
+			bool yingZhuang = isYingZhuangHu(avatar, huTile, zimo);
 			avatar->setYingZhuang(yingZhuang);
-
-			if (_laiziEnabled) {
-				if (avatar->isZiMo()) {
-					int laiZiCount = countLaiZiForHu(avatar, huTile, true);
-					if (laiZiCount >= 4)
-						avatar->addHuWay(MahjongGenre::HuWay::TianTianHu);
-					else if (laiZiCount >= 3)
-						avatar->addHuWay(MahjongGenre::HuWay::TianHu);
-
-					if (avatar->canMingZiDiHu(huTile))
-						avatar->addHuWay(MahjongGenre::HuWay::DiHu);
-				}
-			}
 
 			if (isHeiTianHu(avatar)) {
 				int oldStyle = 0;
@@ -2194,7 +2193,7 @@ void TaoJiangMahjongRoom::dealTiles() {
 
 			if (desiredGolds[i] < 0) {
 				int64_t loss = -desiredGolds[i];
-				int64_t cashPledge = std::max<int64_t>(0LL, avatar1->getCashPledge());
+				int64_t cashPledge = static_cast<int64_t>(std::max(0.0, avatar1->getCashPledge()));
 				if (loss > cashPledge)
 					loss = cashPledge;
 				actualGolds[i] = -loss;
@@ -2540,6 +2539,73 @@ void TaoJiangMahjongRoom::dealTiles() {
 		return count;
 	}
 
+	int TaoJiangMahjongRoom::countMingZiForHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool includeHuTile) const {
+		if (avatar == nullptr || !_laiziEnabled)
+			return 0;
+
+		int count = 0;
+		bool huTileInHand = false;
+		const MahjongTileArray& handTiles = avatar->getTiles();
+		for (const MahjongTile& mt : handTiles) {
+			if (isLaiZiOriginal(mt.getTile()))
+				count++;
+			if (huTile.isValid() && mt.getId() == huTile.getId())
+				huTileInHand = true;
+		}
+
+		if (includeHuTile && huTile.isValid() && !huTileInHand && isLaiZiOriginal(huTile.getTile()))
+			count++;
+		return count;
+	}
+
+	bool TaoJiangMahjongRoom::isValidHuHandTileCount(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool zimo) const {
+		if (avatar == nullptr)
+			return false;
+
+		int handTileCount = static_cast<int>(avatar->getTiles().size());
+		if (zimo && huTile.isValid()) {
+			bool huTileInHand = false;
+			const MahjongTileArray& handTiles = avatar->getTiles();
+			for (const MahjongTile& mt : handTiles) {
+				if (mt.getId() == huTile.getId()) {
+					huTileInHand = true;
+					break;
+				}
+			}
+			if (!huTileInHand)
+				handTileCount++;
+		}
+
+		if (zimo)
+			return handTileCount == 14 || handTileCount == 11 || handTileCount == 8 ||
+				handTileCount == 5 || handTileCount == 2;
+		return handTileCount == 13 || handTileCount == 10 || handTileCount == 7 ||
+			handTileCount == 4 || handTileCount == 1;
+	}
+
+	bool TaoJiangMahjongRoom::canFormRegularHuForSpecial(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool zimo) const {
+		if (avatar == nullptr || !huTile.getTile().isValid())
+			return false;
+
+		TaoJiangMahjongRule* tjRule = dynamic_cast<TaoJiangMahjongRule*>(_rule.get());
+		if (tjRule == nullptr)
+			return avatar->getHuStyle() != 0;
+
+		MahjongTileArray testTiles = avatar->getTiles();
+		bool huTileInHand = false;
+		for (const MahjongTile& mt : testTiles) {
+			if (mt.getId() == huTile.getId()) {
+				huTileInHand = true;
+				break;
+			}
+		}
+		if (!huTileInHand)
+			testTiles.push_back(huTile);
+
+		const MahjongTile* forcedNaturalTile = (!zimo && isLaiZi(huTile.getTile())) ? &huTile : nullptr;
+		return tjRule->canHuWithHand(testTiles, avatar, forcedNaturalTile);
+	}
+
 	bool TaoJiangMahjongRoom::isYingZhuangHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool zimo) const {
 		if (avatar == nullptr)
 			return false;
@@ -2660,6 +2726,12 @@ void TaoJiangMahjongRoom::dealTiles() {
 			hasDaHu = true;
 		if (_baoTinged[avatar->getSeat()])
 			hasDaHu = true;
+		if (isValidHuHandTileCount(avatar, mt, false)) {
+			if (countLaiZiForHu(avatar, mt, false) >= 3)
+				hasDaHu = true;
+			if (countMingZiForHu(avatar, mt, false) >= 3)
+				hasDaHu = true;
+		}
 		bool yingZhuang = isYingZhuangHu(avatar, mt, false);
 		if (yingZhuang)
 			hasDaHu = true;
@@ -2671,11 +2743,32 @@ void TaoJiangMahjongRoom::dealTiles() {
 			return;
 
 		MahjongGenre::TingPaiArray& tingTiles = avatar->getTingTiles();
-		for (const MahjongGenre::TingPai& tp : tingTiles) {
-			if (mt.isSame(tp.tile))
+		int styleValue = static_cast<int>(style);
+		for (MahjongGenre::TingPai& tp : tingTiles) {
+			if (mt.isSame(tp.tile)) {
+				tp.style |= styleValue;
 				return;
+			}
 		}
 		tingTiles.push_back(MahjongGenre::TingPai(mt.getTile(), style));
+	}
+
+	void TaoJiangMahjongRoom::ensureTingTile(MahjongAvatar* avatar, const MahjongTile& mt, int style) const {
+		if (avatar == nullptr || !mt.getTile().isValid())
+			return;
+
+		MahjongGenre::TingPaiArray& tingTiles = avatar->getTingTiles();
+		for (MahjongGenre::TingPai& tp : tingTiles) {
+			if (mt.isSame(tp.tile)) {
+				tp.style |= style;
+				return;
+			}
+		}
+
+		MahjongGenre::TingPai tp;
+		tp.tile = mt.getTile();
+		tp.style = style;
+		tingTiles.push_back(tp);
 	}
 
 	bool TaoJiangMahjongRoom::canHuWithCandidate(MahjongAvatar* avatar, const MahjongTile& mt, bool tileAlreadyInHand,
@@ -2691,6 +2784,9 @@ void TaoJiangMahjongRoom::dealTiles() {
 		if (tjRule == nullptr)
 			return cachedCanHu;
 
+		if (tileAlreadyInHand && tjAvatar != nullptr && tjAvatar->canMingZiDiHu(mt, true))
+			return true;
+
 		MahjongTileArray testTiles = avatar->getTiles();
 		if (!tileAlreadyInHand)
 			testTiles.push_back(mt);
@@ -2700,6 +2796,26 @@ void TaoJiangMahjongRoom::dealTiles() {
 		if (currentCanHu)
 			ensureTingTile(avatar, mt, MahjongGenre::HuStyle::Invalid);
 		return cachedCanHu || currentCanHu;
+	}
+
+	void TaoJiangMahjongRoom::addTaoJiangSpecialHuWays(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile,
+		bool zimo, bool hasRegularHu) const {
+		if (avatar == nullptr || !_laiziEnabled)
+			return;
+		if (!isValidHuHandTileCount(avatar, huTile, zimo))
+			return;
+
+		bool includeHuTile = zimo;
+		if (hasRegularHu || canFormRegularHuForSpecial(avatar, huTile, zimo)) {
+			int laiZiCount = countLaiZiForHu(avatar, huTile, includeHuTile);
+			if (laiZiCount >= 4)
+				avatar->addHuWay(MahjongGenre::HuWay::TianTianHu);
+			else if (laiZiCount >= 3)
+				avatar->addHuWay(MahjongGenre::HuWay::TaoJiangTianHu);
+		}
+
+		if (countMingZiForHu(avatar, huTile, includeHuTile) >= 3)
+			avatar->addHuWay(MahjongGenre::HuWay::TaoJiangDiHu);
 	}
 
 	int TaoJiangMahjongRoom::calcBaseHuScore(int daHuCount, bool zimo, bool yingZhuang) const {
@@ -2729,6 +2845,7 @@ void TaoJiangMahjongRoom::dealTiles() {
 		int score = 0;
 		if (gangPlayer->detectHuStyle(true, huTile)) {
 			gangPlayer->addHuWay(MahjongGenre::HuWay::GangShangHua1);
+			addTaoJiangSpecialHuWays(gangPlayer, huTile, true, gangPlayer->getHuStyle() != 0);
 			gangPlayer->setYingZhuang(isYingZhuangHu(gangPlayer, huTile, true));
 			score = calcBaseHuScore(gangPlayer->getDaHuCount(), true, gangPlayer->isYingZhuang());
 		}
@@ -2791,6 +2908,20 @@ void TaoJiangMahjongRoom::dealTiles() {
 		if (mustKeepSameTing)
 			return sameTingTiles(beforeTing, afterTing);
 		return true;
+	}
+
+	bool TaoJiangMahjongRoom::addImmediateQiangGangOptions(MahjongAvatar* gangPlayer,
+		MahjongAction::Type gangType,
+		const MahjongTile& gangTile) {
+		if (gangPlayer == nullptr || !gangTile.getTile().isValid())
+			return false;
+		if (gangType != MahjongAction::Type::ZhiGang && gangType != MahjongAction::Type::JiaGang)
+			return false;
+
+		MahjongTileArray gangTileCandidates;
+		MahjongTileArray revealedCandidates;
+		gangTileCandidates.push_back(gangTile);
+		return addQiangGangOptions(gangPlayer, gangTileCandidates, revealedCandidates);
 	}
 
 	bool TaoJiangMahjongRoom::addQiangGangOptions(MahjongAvatar* gangPlayer,
@@ -3038,13 +3169,18 @@ void TaoJiangMahjongRoom::dealTiles() {
 		_lastGangType = gangType;
 		_lastGangTileId = mt.getId();
 
-		// 桃江麻将：杠后翻3张牌
-		processGangReveal(pAvatar, gangType, mt);
+		// 桃江麻将：直杠、加杠先检查杠牌本身能否被抢；暗杠直接进入翻3张。
+		if (addImmediateQiangGangOptions(pAvatar, gangType, mt)) {
+			changeState(StateMachine::Action);
+			return true;
+		}
+
+		processGangReveal(pAvatar);
 
 		return true;
 	}
 
-	void TaoJiangMahjongRoom::processGangReveal(MahjongAvatar* gangPlayer, MahjongAction::Type gangType, const MahjongTile& gangTile) {
+	void TaoJiangMahjongRoom::processGangReveal(MahjongAvatar* gangPlayer) {
 		if (gangPlayer == nullptr)
 			return;
 
@@ -3091,13 +3227,11 @@ void TaoJiangMahjongRoom::dealTiles() {
 		} else {
 			MahjongTileArray gangTileCandidates;
 			MahjongTileArray revealedCandidates;
-			if (gangType == MahjongAction::Type::ZhiGang || gangType == MahjongAction::Type::JiaGang)
-				gangTileCandidates.push_back(gangTile);
 			for (int k = 0; k < _gangRevealedCount; k++)
 				revealedCandidates.push_back(_gangRevealedTiles[k]);
 
 			if (addQiangGangOptions(gangPlayer, gangTileCandidates, revealedCandidates)) {
-				// 有对手可以抢杠，进入等待动作选项状态
+				// 有对手可以胡翻出的牌，进入等待动作选项状态
 				changeState(StateMachine::Action);
 			} else {
 				finishGangRevealWithoutHu(gangPlayer);
@@ -3147,21 +3281,19 @@ void TaoJiangMahjongRoom::dealTiles() {
 			if (!_acOps1[0].empty())
 				return;
 
-			// 所有人放弃抢杠
+			// 所有人放弃抢杠。若还没翻3张，继续原本杠后翻牌流程；若已翻出，则结束杠后流程。
 			_waitingQiangGang = false;
 			MahjongAvatar* gangPlayer = dynamic_cast<MahjongAvatar*>(getAvatar(_actor).get());
-			finishGangRevealWithoutHu(gangPlayer);
+			if (_gangRevealedCount > 0) {
+				finishGangRevealWithoutHu(gangPlayer);
+			} else {
+				processGangReveal(gangPlayer);
+			}
 		} else if (_gangRevealedCount > 0) {
-			// 开杠者放弃了杠上花，检查对手能否抢杠
+			// 开杠者放弃了杠上花，检查对手能否胡翻出的牌
 			MahjongAvatar* gangPlayer = dynamic_cast<MahjongAvatar*>(getAvatar(_actor).get());
 			MahjongTileArray gangTileCandidates;
 			MahjongTileArray revealedCandidates;
-			if (_lastGangType == MahjongAction::Type::ZhiGang || _lastGangType == MahjongAction::Type::JiaGang) {
-				MahjongTile gangTile;
-				gangTile.setId(_lastGangTileId);
-				if (_dealer.getTileById(gangTile))
-					gangTileCandidates.push_back(gangTile);
-			}
 			for (int k = 0; k < _gangRevealedCount; k++)
 				revealedCandidates.push_back(_gangRevealedTiles[k]);
 

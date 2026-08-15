@@ -23,8 +23,8 @@ namespace NiuMa {
 
 	public:
 		const std::string& getPlayerId() const;
-		int64_t getGold() const;
-		int64_t getDeposit() const;
+			double getGold() const;
+			double getDeposit() const;
 		int64_t getDiamond() const;
 		int64_t getVersion() const;
 
@@ -33,10 +33,10 @@ namespace NiuMa {
 		std::string _playerId;
 
 		// 金币数量
-		int64_t _gold;
+			double _gold;
 
 		// 存款余额
-		int64_t _deposit;
+			double _deposit;
 
 		// 钻石数量
 		int64_t _diamond;

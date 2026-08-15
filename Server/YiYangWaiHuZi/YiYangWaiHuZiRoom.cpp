@@ -53,6 +53,8 @@ namespace NiuMa
 			if (root.isMember("tun_score_rate")) _tunScoreRate = root["tun_score_rate"].asInt();
 			if (root.isMember("round_count")) _roundLimit = root["round_count"].asInt();
 			if (root.isMember("round_limit")) _roundLimit = root["round_limit"].asInt();
+			if (_roundLimit <= 0 || (_roundLimit > 1 && _roundLimit < 8))
+				_roundLimit = 8;
 			if (root.isMember("room_fee") && root["room_fee"].isInt64())
 				_roomFee = root["room_fee"].asInt64();
 			else if (root.isMember("room_fee") && root["room_fee"].isInt())
@@ -413,7 +415,8 @@ namespace NiuMa
 			if (_si == huSeat)
 				continue;
 			int64_t loss = static_cast<int64_t>(baseScore) * _level;
-			loss = std::min<int64_t>(loss, std::max<int64_t>(0LL, a->getCashPledge()));
+			int64_t cashPledgeLimit = static_cast<int64_t>(std::max(0.0, a->getCashPledge()));
+			loss = std::min<int64_t>(loss, cashPledgeLimit);
 			winnerGold += loss;
 			a->setRoundScore(-baseScore);
 			a->setWinGold(-static_cast<double>(loss));

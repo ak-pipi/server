@@ -710,6 +710,8 @@ namespace NiuMa
 		}
 		delete reader;
 		_roundLimit = readPositiveInt(root, "round_count", _roundLimit);
+		if (_roundLimit > 1 && _roundLimit < 8)
+			_roundLimit = 8;
 		int64_t roomFee = readRoomFeeAmount(root);
 		if (roomFee >= 0)
 			_roomFee = roomFee;

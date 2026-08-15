@@ -110,11 +110,11 @@ namespace NiuMa
 		// 红桃10所在座位
 		int _birdSeat;
 
-		// 本轮尚未结算的最大炸弹座位
+		// 等待确认未被管住的炸弹座位
 		int _pendingBombSeat;
 
-		// 各玩家本局炸弹分
-		int _bombScoreDeltas[2];
+			// 各玩家本局炸弹分
+			int _bombScoreDeltas[2];
 
 		// 各玩家本局得分炸弹次数
 		int _bombWinCounts[2];
@@ -144,6 +144,9 @@ namespace NiuMa
 
 		// 解散发起时间
 		time_t _dissolveTick;
+
+		// 整场胜负统计是否已按房间维度记录
+		bool _roomScoreboardRecorded;
 
 	protected:
 		virtual GameAvatar::Ptr createAvatar(const std::string& playerId, int seat, bool robot) const override;
@@ -184,11 +187,11 @@ namespace NiuMa
 		// 是否启用扎鸟
 		bool isZhaNiaoEnabled() const;
 
-		// 结算当前未被管住的炸弹
+		// 确认上一手炸弹未被管住并计入本局炸弹分
 		void finalizePendingBomb();
 
-		// 检查是否所有人都已准备
-		bool allReady() const;
+			// 检查是否所有人都已准备
+			bool allReady() const;
 
 		// 执行出牌
 		PlayResult doPlay(int seat, const std::vector<int>& cardIds);
@@ -227,6 +230,7 @@ namespace NiuMa
 			void recordDistrictPlayerTrack(const std::string& playerId);
 
 			void publishFinalRoomFee();
+			void recordFinalRoomScoreboard();
 
 			void onDisbandRequest(const NetMessage::Ptr& netMsg);
 			void onDisbandChoose(const NetMessage::Ptr& netMsg);
@@ -240,12 +244,12 @@ namespace NiuMa
 		void onReady(const NetMessage::Ptr& netMsg);
 		void onPlay(const NetMessage::Ptr& netMsg);
 
-		// 消息发送
-		void notifyDeal(const std::string& playerId);
-		void notifyPlay(int seat, const std::vector<int>& cardIds, int genre, int nextPlayer);
-		void notifySettlement(int winnerSeat);
-		void notifyGameState(const std::string& playerId);
-	};
+			// 消息发送
+			void notifyDeal(const std::string& playerId);
+			void notifyPlay(int seat, const std::vector<int>& cardIds, int genre, int nextPlayer);
+			void notifySettlement(int winnerSeat, bool roomFinished);
+			void notifyGameState(const std::string& playerId);
+		};
 }
 
 #endif // _NIU_MA_PAODEKUAI_ROOM_H_

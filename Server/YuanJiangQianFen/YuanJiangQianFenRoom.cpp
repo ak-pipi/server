@@ -51,17 +51,20 @@ namespace NiuMa
 		if (root.isMember("banker_rule")) _bankerRule = root["banker_rule"].asInt();
 		if (root.isMember("deck_count")) _deckCount = root["deck_count"].asInt();
 		if (root.isMember("bomb_enabled")) _bombEnabled = root["bomb_enabled"].asBool();
-			if (root.isMember("round_limit")) _roundLimit = root["round_limit"].asInt();
-			if (root.isMember("max_score")) _maxScore = root["max_score"].asInt();
-			if (root.isMember("room_fee") && root["room_fee"].isInt64())
-				_roomFee = root["room_fee"].asInt64();
-			else if (root.isMember("room_fee") && root["room_fee"].isInt())
-				_roomFee = root["room_fee"].asInt();
-			else if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
-				_roomFee = root["room_fee_type"].asInt();
-			if (root.isMember("score_cards") && root["score_cards"].isObject()) {
-				for (const auto& key : root["score_cards"].getMemberNames())
-					_scoreCardMap[std::atoi(key.c_str())] = root["score_cards"][key].asInt();
+		if (root.isMember("round_count")) _roundLimit = root["round_count"].asInt();
+		if (root.isMember("round_limit")) _roundLimit = root["round_limit"].asInt();
+		if (_roundLimit <= 0 || (_roundLimit > 1 && _roundLimit < 8))
+			_roundLimit = 8;
+		if (root.isMember("max_score")) _maxScore = root["max_score"].asInt();
+		if (root.isMember("room_fee") && root["room_fee"].isInt64())
+			_roomFee = root["room_fee"].asInt64();
+		else if (root.isMember("room_fee") && root["room_fee"].isInt())
+			_roomFee = root["room_fee"].asInt();
+		else if (root.isMember("room_fee_type") && root["room_fee_type"].isInt())
+			_roomFee = root["room_fee_type"].asInt();
+		if (root.isMember("score_cards") && root["score_cards"].isObject()) {
+			for (const auto& key : root["score_cards"].getMemberNames())
+				_scoreCardMap[std::atoi(key.c_str())] = root["score_cards"][key].asInt();
 		}
 		// 默认计分牌配置
 		if (_scoreCardMap.empty()) {
@@ -302,7 +305,8 @@ namespace NiuMa
 			if (!avatar)
 				continue;
 			if (desiredGolds[i] < 0LL) {
-				int64_t loss = std::min<int64_t>(-desiredGolds[i], std::max<int64_t>(0LL, avatar->getCashPledge()));
+				int64_t cashPledgeLimit = static_cast<int64_t>(std::max(0.0, avatar->getCashPledge()));
+				int64_t loss = std::min<int64_t>(-desiredGolds[i], cashPledgeLimit);
 				_roundGolds[i] = -loss;
 				totalPaid += loss;
 			}

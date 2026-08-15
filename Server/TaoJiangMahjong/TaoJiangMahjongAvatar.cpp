@@ -31,6 +31,26 @@ namespace NiuMa
 			return ((laiziCount - singleCount) % 2) == 0;
 		}
 
+		bool getNaturalQiXiaoDuiQuadCount(const MahjongTileArray& tiles, int& quadCount) {
+			quadCount = 0;
+			if (tiles.size() != 14)
+				return false;
+
+			std::map<MahjongTile::Tile, int> tileCounts;
+			for (const MahjongTile& mt : tiles)
+				tileCounts[mt.getTile()]++;
+
+			int pairs = 0;
+			for (const auto& kv : tileCounts) {
+				if (kv.second % 2 != 0)
+					return false;
+				pairs += kv.second / 2;
+				if (kv.second >= 4)
+					quadCount++;
+			}
+			return pairs == 7;
+		}
+
 		bool findHuTile(const MahjongGenre::TingPaiArray& huTiles, const MahjongTile& mt, int* style = nullptr) {
 			for (const MahjongGenre::TingPai& tp : huTiles) {
 				if (mt.isSame(tp.tile)) {
@@ -132,19 +152,20 @@ namespace NiuMa
 	}
 
 	bool TaoJiangMahjongAvatar::detectHuStyle(bool bZiMo, const MahjongTile& mt) {
-		return detectHuStyle(bZiMo, mt, true);
+		bool huTileAsWildcard = bZiMo || !(_laiZi.isValid() && mt.getTile() == _laiZi);
+		return detectHuStyle(bZiMo, mt, huTileAsWildcard);
 	}
 
 	bool TaoJiangMahjongAvatar::detectHuStyle(bool bZiMo, const MahjongTile& mt, bool huTileAsWildcard) {
 		// 先从_tingTiles中获取基础胡牌样式（平胡）
 		_huStyle = 0;
-		bool bFound = false;
 		const MahjongGenre::TingPaiArray& huTiles = _baoTinged ? _baoTingTiles : _tingTiles;
-		bFound = findHuTile(huTiles, mt, &_huStyle);
-		if (!bFound && bZiMo)
-			bFound = canMingZiDiHu(mt);
-		if (!bFound)
+		bool bFound = findHuTile(huTiles, mt, &_huStyle);
+		bool mingZiDiHu = canMingZiDiHu(mt, bZiMo);
+		if (!bFound && !mingZiDiHu)
 			return false;
+		if (!bFound && mingZiDiHu)
+			return true;
 
 		// 构建完整牌面列表（手牌 + 碰杠牌 + 点炮牌）
 		MahjongTileArray lstAll;
@@ -326,6 +347,17 @@ namespace NiuMa
 					_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3);
 			}
 
+			int naturalQuadCount = 0;
+			if (getNaturalQiXiaoDuiQuadCount(lstAll, naturalQuadCount)) {
+				_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui);
+				if (naturalQuadCount == 1)
+					_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui1);
+				else if (naturalQuadCount == 2)
+					_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui2);
+				else if (naturalQuadCount >= 3)
+					_huStyle |= static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui3);
+			}
+
 		}
 
 		return true;
@@ -413,16 +445,13 @@ namespace NiuMa
 		}
 
 		// 胡牌方式大胡
-		bool isTianHu = false;
-		bool isTianTianHu = false;
 		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::TianTianHu)) == static_cast<int>(MahjongGenre::HuWay::TianTianHu)) {
 			// 天天胡 = 2个大胡
-			isTianTianHu = true;
 			daHuCount += 2;
 		}
-		else if ((_huWay & static_cast<int>(MahjongGenre::HuWay::TianHu)) == static_cast<int>(MahjongGenre::HuWay::TianHu)) {
+		else if (((_huWay & static_cast<int>(MahjongGenre::HuWay::TaoJiangTianHu)) == static_cast<int>(MahjongGenre::HuWay::TaoJiangTianHu)) ||
+			((_huWay & static_cast<int>(MahjongGenre::HuWay::TianHu)) == static_cast<int>(MahjongGenre::HuWay::TianHu))) {
 			// 天胡 = 1个大胡
-			isTianHu = true;
 			daHuCount += 1;
 		}
 
@@ -439,9 +468,14 @@ namespace NiuMa
 
 		// 硬庄不计入大胡数量，结算时作为独立 x2 倍数处理。
 
-		// 地胡：拥有3张明子牌且能正常胡牌，算1个大胡
-		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu))
+		// 地胡：拥有3张明子牌，算1个大胡；若同时构成平胡，平胡额外算1个大胡。
+		bool isDiHu = ((_huWay & static_cast<int>(MahjongGenre::HuWay::TaoJiangDiHu)) == static_cast<int>(MahjongGenre::HuWay::TaoJiangDiHu)) ||
+			((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu));
+		if (isDiHu) {
 			daHuCount += 1;
+			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::PingHu)) == static_cast<int>(MahjongGenre::HuStyle::PingHu))
+				daHuCount += 1;
+		}
 
 		int multiplier = 1;
 		int baseMultiplier = isZiMo() ? 3 : 2;
@@ -482,15 +516,21 @@ namespace NiuMa
 
 		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::TianTianHu)) == static_cast<int>(MahjongGenre::HuWay::TianTianHu))
 			daHuCount += 2;
-		else if ((_huWay & static_cast<int>(MahjongGenre::HuWay::TianHu)) == static_cast<int>(MahjongGenre::HuWay::TianHu))
+		else if (((_huWay & static_cast<int>(MahjongGenre::HuWay::TaoJiangTianHu)) == static_cast<int>(MahjongGenre::HuWay::TaoJiangTianHu)) ||
+			((_huWay & static_cast<int>(MahjongGenre::HuWay::TianHu)) == static_cast<int>(MahjongGenre::HuWay::TianHu)))
 			daHuCount += 1;
 
 		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::GangShangHua1)) == static_cast<int>(MahjongGenre::HuWay::GangShangHua1))
 			daHuCount += 1;
 
-		// 地胡算1个大胡
-		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu))
+		// 地胡算1个大胡；地胡带平胡时，平胡额外算1个大胡。
+		bool isDiHu = ((_huWay & static_cast<int>(MahjongGenre::HuWay::TaoJiangDiHu)) == static_cast<int>(MahjongGenre::HuWay::TaoJiangDiHu)) ||
+			((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu));
+		if (isDiHu) {
 			daHuCount += 1;
+			if ((_huStyle & static_cast<int>(MahjongGenre::HuStyle::PingHu)) == static_cast<int>(MahjongGenre::HuStyle::PingHu))
+				daHuCount += 1;
+		}
 
 		if (_baoTinged)
 			daHuCount += 1;
@@ -503,10 +543,12 @@ namespace NiuMa
 
 		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::TianTianHu)) == static_cast<int>(MahjongGenre::HuWay::TianTianHu))
 			name += "天天胡+";
-		else if ((_huWay & static_cast<int>(MahjongGenre::HuWay::TianHu)) == static_cast<int>(MahjongGenre::HuWay::TianHu))
+		else if (((_huWay & static_cast<int>(MahjongGenre::HuWay::TaoJiangTianHu)) == static_cast<int>(MahjongGenre::HuWay::TaoJiangTianHu)) ||
+			((_huWay & static_cast<int>(MahjongGenre::HuWay::TianHu)) == static_cast<int>(MahjongGenre::HuWay::TianHu)))
 			name += "天胡+";
 
-		if ((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu))
+		if (((_huWay & static_cast<int>(MahjongGenre::HuWay::TaoJiangDiHu)) == static_cast<int>(MahjongGenre::HuWay::TaoJiangDiHu)) ||
+			((_huWay & static_cast<int>(MahjongGenre::HuWay::DiHu)) == static_cast<int>(MahjongGenre::HuWay::DiHu)))
 			name += "地胡+";
 
 		if (_baoTinged)
@@ -603,29 +645,35 @@ namespace NiuMa
 	}
 
 	bool TaoJiangMahjongAvatar::canMingZiDiHu(const MahjongTile& mt) const {
-		if (!_mingZi.isValid() || !mt.getTile().isValid())
-			return false;
-		if (_fetchedTileId != mt.getId())
+		return canMingZiDiHu(mt, true);
+	}
+
+	bool TaoJiangMahjongAvatar::canMingZiDiHu(const MahjongTile& mt, bool zimo) const {
+		if (!_mingZi.isValid())
 			return false;
 
 		int mingZiCount = 0;
+		bool huTileInHand = false;
 		for (const MahjongTile& t : _handTiles) {
 			if (t.getTile() == _mingZi)
 				mingZiCount++;
+			if (mt.isValid() && t.getId() == mt.getId())
+				huTileInHand = true;
 		}
-		for (const MahjongChapter& ch : _chapters) {
-			const MahjongTileArray& tiles = ch.getAllTiles();
-			for (const MahjongTile& t : tiles) {
-				if (t.getTile() == _mingZi)
-					mingZiCount++;
-			}
-		}
+		if (zimo && mt.isValid() && !huTileInHand && mt.getTile() == _mingZi)
+			mingZiCount++;
 		if (mingZiCount < 3)
 			return false;
 
-		int logicalTileCount = static_cast<int>(_handTiles.size())
-			+ static_cast<int>(_chapters.size()) * 3;
-		return logicalTileCount == 14;
+		int handTileCount = static_cast<int>(_handTiles.size());
+		if (zimo && mt.isValid() && !huTileInHand)
+			handTileCount++;
+
+		if (zimo)
+			return handTileCount == 14 || handTileCount == 11 || handTileCount == 8 ||
+				handTileCount == 5 || handTileCount == 2;
+		return handTileCount == 13 || handTileCount == 10 || handTileCount == 7 ||
+			handTileCount == 4 || handTileCount == 1;
 	}
 
 	bool TaoJiangMahjongAvatar::canZhiGang(const MahjongTile& mt) const {
@@ -689,7 +737,7 @@ namespace NiuMa
 	}
 
 	bool TaoJiangMahjongAvatar::canHu(const MahjongTile& mt) const {
-		if (canMingZiDiHu(mt))
+		if (canMingZiDiHu(mt, _fetchedTileId == mt.getId()))
 			return true;
 
 		const MahjongGenre::TingPaiArray& huTiles = _baoTinged ? _baoTingTiles : _tingTiles;

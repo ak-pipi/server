@@ -33,8 +33,12 @@ namespace NiuMa
 		, bombCount(0)
 		, multiplier(1)
 	{
-		for (int i = 0; i < 2; i++)
+		for (int i = 0; i < 2; i++) {
+			scores[i] = 0;
+			bombScores[i] = 0;
+			bombWinCounts[i] = 0;
 			remainCounts[i] = 0;
+		}
 	}
 
 	MsgPaoDeKuaiDeal::MsgPaoDeKuaiDeal()
@@ -52,7 +56,14 @@ namespace NiuMa
 		, nextPlayer(-1)
 		, remainCount(0)
 		, multiplier(1)
-	{}
+		, bombCount(0)
+	{
+		for (int i = 0; i < 2; i++) {
+			scores[i] = 0;
+			bombScores[i] = 0;
+			bombWinCounts[i] = 0;
+		}
+	}
 
 	MsgPaoDeKuaiSettlement::MsgPaoDeKuaiSettlement()
 		: winnerSeat(-1)
@@ -67,12 +78,14 @@ namespace NiuMa
 		, birdHit(false)
 		, birdSeat(-1)
 		, birdMultiplier(1)
+		, roomFinished(false)
 		, roomFeeTotal(0)
 		, shuffleFeeTotal(0)
 	{
 		for (int i = 0; i < 2; i++) {
 			scores[i] = 0;
 			winGolds[i] = 0;
+			golds[i] = 0;
 			bombScores[i] = 0;
 			bombWinCounts[i] = 0;
 		}

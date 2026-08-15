@@ -24,7 +24,7 @@ namespace NiuMa {
 	public:
 		const std::string& getPlayerId() const;
 		const std::string& getVenueId() const;
-		int64_t getAmount() const;
+			double getAmount() const;
 
 	private:
 		//
@@ -34,7 +34,7 @@ namespace NiuMa {
 		std::string _venueId;
 
 		// 押金数额
-		int64_t _amount;
+			double _amount;
 	};
 }
 

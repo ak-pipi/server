@@ -82,6 +82,7 @@ namespace NiuMa
 		void setMingZi(const MahjongTile::Tile& tile);
 		const MahjongTile::Tile& getMingZi() const;
 		bool canMingZiDiHu(const MahjongTile& mt) const;
+		bool canMingZiDiHu(const MahjongTile& mt, bool zimo) const;
 
 	/**
 		 * 设置是否已报听

@@ -37,8 +37,8 @@ namespace NiuMa
 		void setSeat(int s);
 		int64_t getGold();
 		void setGold(int64_t gold);
-		int64_t getCashPledge() const;
-		void setCashPledge(int64_t s);
+			double getCashPledge() const;
+			void setCashPledge(double s);
 		bool isAuthorize() const;
 		void setAuthorize(bool s);
 		bool isReady() const;
@@ -101,7 +101,7 @@ namespace NiuMa
 		int64_t _gold;
 
 		// 当前押金数
-		int64_t _cashPledge;
+			double _cashPledge;
 
 		// 是否托管，所谓托管即由系统自动为玩家执行游戏操作
 		bool _authorize;

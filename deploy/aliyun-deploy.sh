@@ -190,6 +190,7 @@ append_builtin_sql_migrations() {
             "${web_sql_dir}/v14_agent_workbench_and_menu_cleanup.sql"
             "${web_sql_dir}/v15_fix_game_management_menu_encoding.sql"
             "${web_sql_dir}/v16_permanent_agency_invite_codes.sql"
+            "${web_sql_dir}/v33_paodekuai_min_carry_room_settlement.sql"
         )
     fi
     ${RESET_PLAYER_DATA} && SQL_FILES+=("${web_sql_dir}/v17_player_id_invite_binding_reset.sql")

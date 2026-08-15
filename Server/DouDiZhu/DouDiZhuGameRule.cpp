@@ -357,6 +357,8 @@ namespace NiuMa
 			_baseScore = std::max(1, root["base_score"].asInt());
 		if (root.isMember("round_count") && root["round_count"].isInt())
 			_roundCount = std::max(0, root["round_count"].asInt());
+		if (_roundCount <= 0 || (_roundCount > 1 && _roundCount < 8))
+			_roundCount = 8;
 		if (root.isMember("hand_card_count") && root["hand_card_count"].isInt())
 			_handCardCount = std::max(1, root["hand_card_count"].asInt());
 		if (root.isMember("bottom_card_count") && root["bottom_card_count"].isInt())

@@ -695,8 +695,10 @@
 				score = std::min(score, _rule->getMaxRoundScore());
 			int loserSeat = getNextSeat(winnerSeat);
 			std::shared_ptr<DouDiZhuAvatar> loser = getAvatar(loserSeat);
-			if (loser)
-				score = static_cast<int>(std::min<int64_t>(score, std::max<int64_t>(0LL, loser->getCashPledge())));
+			if (loser) {
+				int64_t cashPledgeLimit = static_cast<int64_t>(std::max(0.0, loser->getCashPledge()));
+				score = static_cast<int>(std::min<int64_t>(score, cashPledgeLimit));
+			}
 			for (int i = 0; i < 2; i++) {
 			std::shared_ptr<DouDiZhuAvatar> avatar = getAvatar(i);
 			if (!avatar)

@@ -7,8 +7,8 @@
 namespace NiuMa {
 	GetCapitalTask::GetCapitalTask(const std::string& playerId)
 		: _playerId(playerId)
-		, _gold(0LL)
-		, _deposit(0LL)
+		, _gold(0.0)
+		, _deposit(0.0)
 		, _diamond(0LL)
 		, _version(0LL)
 	{}
@@ -24,8 +24,8 @@ namespace NiuMa {
 	int GetCapitalTask::fetchResult(sql::ResultSet* res) {
 		int rows = 0;
 		if (res->next()) {
-			_gold = res->getInt64("gold");
-			_deposit = res->getInt64("deposit");
+			_gold = res->getDouble("gold");
+			_deposit = res->getDouble("deposit");
 			_diamond = res->getInt64("diamond");
 			_version = res->getInt64("version");
 			rows++;
@@ -37,11 +37,11 @@ namespace NiuMa {
 		return _playerId;
 	}
 
-	int64_t GetCapitalTask::getGold() const {
+	double GetCapitalTask::getGold() const {
 		return _gold;
 	}
 
-	int64_t GetCapitalTask::getDeposit() const {
+	double GetCapitalTask::getDeposit() const {
 		return _deposit;
 	}
 

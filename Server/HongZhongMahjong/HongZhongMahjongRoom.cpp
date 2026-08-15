@@ -104,6 +104,8 @@ namespace NiuMa
 			_roomFee = root["room_fee_type"].asInt();
 		if (root.isMember("round_count") && root["round_count"].isInt())
 			_roundCount = root["round_count"].asInt();
+		if (_roundCount <= 0 || (_roundCount > 1 && _roundCount < 8))
+			_roundCount = 8;
 		if (root.isMember("allow_chi") && root["allow_chi"].isBool())
 			_allowChi = root["allow_chi"].asBool();
 		if (root.isMember("allow_peng") && root["allow_peng"].isBool())

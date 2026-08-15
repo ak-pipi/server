@@ -170,6 +170,21 @@ namespace NiuMa
 		int countLaiZiForHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool includeHuTile) const;
 
 		/**
+		 * 统计胡牌时明子数量：仅统计真实手牌；自摸/杠上花的胡牌张计入，抓炮张不计入。
+		 */
+		int countMingZiForHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool includeHuTile) const;
+
+		/**
+		 * 校验桃江胡牌时真实手牌张数：自摸/杠上花为 3n+2，抓炮为 3n+1。
+		 */
+		bool isValidHuHandTileCount(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool zimo) const;
+
+		/**
+		 * 判断当前真实手牌加胡牌张是否能构成常规胡牌结构；抓炮张只参与胡牌结构，不参与特殊牌数量。
+		 */
+		bool canFormRegularHuForSpecial(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool zimo) const;
+
+		/**
 		 * 按桃江规则估算某次胡牌是否具备可点炮的大胡
 		 */
 		bool hasDianPaoDaHu(TaoJiangMahjongAvatar* avatar, const MahjongTile& mt) const;
@@ -185,11 +200,14 @@ namespace NiuMa
 		 * 确保候选胡牌进入听牌缓存，避免多轮换听后动作生成依赖旧缓存
 		 */
 		void ensureTingTile(MahjongAvatar* avatar, const MahjongTile& mt, MahjongGenre::HuStyle style) const;
+		void ensureTingTile(MahjongAvatar* avatar, const MahjongTile& mt, int style) const;
 
 		/**
-			 * 根据大胡数量、胡牌方式和硬庄计算单份胡分（不含台桌分，结算时统一乘）
+		 * 根据大胡数量、胡牌方式和硬庄计算单份胡分（不含台桌分，结算时统一乘）
 		 */
 		int calcBaseHuScore(int daHuCount, bool zimo, bool yingZhuang) const;
+
+		void addTaoJiangSpecialHuWays(TaoJiangMahjongAvatar* avatar, const MahjongTile& huTile, bool zimo, bool hasRegularHu) const;
 
 		/**
 		 * 抢杠胡按开杠者可杠上花的分数计分
@@ -207,9 +225,16 @@ namespace NiuMa
 		bool sameTingTiles(const MahjongGenre::TingPaiArray& a, const MahjongGenre::TingPaiArray& b) const;
 
 		/**
-		 * 杠后翻3张牌处理：开杠者优先胡，否则对手可抢杠，都不胡则进弃牌池
+		 * 明杠后先检查杠牌本身能否被抢；暗杠不检查。
 		 */
-		void processGangReveal(MahjongAvatar* gangPlayer, MahjongAction::Type gangType, const MahjongTile& gangTile);
+		bool addImmediateQiangGangOptions(MahjongAvatar* gangPlayer,
+			MahjongAction::Type gangType,
+			const MahjongTile& gangTile);
+
+		/**
+		 * 杠后翻3张牌处理：开杠者优先胡，否则对手可胡翻牌，都不胡则进弃牌池
+		 */
+		void processGangReveal(MahjongAvatar* gangPlayer);
 
 		/**
 		 * 为对手添加抢杠/抢翻牌胡动作

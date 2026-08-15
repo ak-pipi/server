@@ -110,6 +110,15 @@ namespace NiuMa
 		// 当前倍数
 		int multiplier;
 
+		// 各玩家当前本局分
+		int scores[2];
+
+		// 各玩家当前炸弹分
+		int bombScores[2];
+
+		// 各玩家当前得分炸弹次数
+		int bombWinCounts[2];
+
 		// 各玩家剩余手牌数量
 		int remainCounts[2];
 
@@ -118,7 +127,8 @@ namespace NiuMa
 
 		MSGPACK_DEFINE_MAP(gameState, currentPlayer, mySeat, myCards, lastPlayCards,
 			lastPlaySeat, lastPlayGenre, isFirstPlay, roundNo, banker, playerCount,
-			number, level, baseScore, scoreScale, roundCount, bombCount, multiplier, remainCounts, avatars);
+			number, level, baseScore, scoreScale, roundCount, bombCount, multiplier,
+			scores, bombScores, bombWinCounts, remainCounts, avatars);
 	};
 
 	/**
@@ -239,7 +249,20 @@ namespace NiuMa
 		// 当前倍数
 		int multiplier;
 
-		MSGPACK_DEFINE_MAP(seat, cardIds, genre, nextPlayer, remainCount, multiplier);
+		// 本局已出炸弹数量
+		int bombCount;
+
+		// 各玩家当前本局分
+		int scores[2];
+
+		// 各玩家当前炸弹分
+		int bombScores[2];
+
+		// 各玩家当前得分炸弹次数
+		int bombWinCounts[2];
+
+		MSGPACK_DEFINE_MAP(seat, cardIds, genre, nextPlayer, remainCount, multiplier,
+			bombCount, scores, bombScores, bombWinCounts);
 	};
 
 	/**
@@ -292,6 +315,9 @@ namespace NiuMa
 		// 各玩家赢的金币
 		int64_t winGolds[2];
 
+		// 各玩家结算后的房内携带分
+		double golds[2];
+
 		// 各玩家剩余手牌
 		std::vector<int> remainCards[2];
 
@@ -334,6 +360,9 @@ namespace NiuMa
 		// 各玩家得分炸弹次数
 		int bombWinCounts[2];
 
+		// 本局结算后房间是否结束
+		bool roomFinished;
+
 			int64_t roomFeeTotal;
 			std::vector<std::string> roomFeePlayerIds;
 			std::vector<int64_t> roomFeeAmounts;
@@ -341,12 +370,12 @@ namespace NiuMa
 			std::vector<std::string> shuffleFeePlayerIds;
 			std::vector<int64_t> shuffleFeeAmounts;
 
-			MSGPACK_DEFINE_MAP(winnerSeat, scores, winGolds, remainCards,
+				MSGPACK_DEFINE_MAP(winnerSeat, scores, winGolds, golds, remainCards,
 				roundNo, roundCount, baseScore, scoreScale, bombCount, multiplier, spring,
 				zhaNiao, birdHit, birdSeat, birdMultiplier, bombScores, bombWinCounts,
-				roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
+				roomFinished, roomFeeTotal, roomFeePlayerIds, roomFeeAmounts,
 				shuffleFeeTotal, shuffleFeePlayerIds, shuffleFeeAmounts);
-		};
+			};
 
 	/**
 	 * 通知解散投票消息

@@ -67,7 +67,7 @@ namespace NiuMa {
 	public:
 		RoomCategory getCategory() const;
 		int getMaxPlayerNums() const;
-		int64_t getCashPledge() const;
+			double getCashPledge() const;
 		int64_t getDiamondNeed() const;
 		GameAvatar::Ptr getAvatar(int seat) const;
 		GameAvatar::Ptr getAvatar(const std::string& playerId) const;
@@ -89,7 +89,7 @@ namespace NiuMa {
 		 * 设置押金
 		 * @param cashPledge 押金数量
 		 */
-		void setCashPledge(int64_t cashPledge);
+			void setCashPledge(double cashPledge);
 
 		/**
 		 * 设置每局钻石扣数
@@ -140,7 +140,7 @@ namespace NiuMa {
 		 * @param cashPledge 押金数量，当该值为0时删除数据库中的押金记录
 		 * @return 是否更新成功
 		 */
-		bool updateCashPledge(const std::string& playerId, int64_t cashPledge) const;
+			bool updateCashPledge(const std::string& playerId, double cashPledge) const;
 
 		/**
 		 * 扣除玩家钻石
@@ -566,7 +566,7 @@ namespace NiuMa {
 		const int _maxPlayerNums;
 
 		// 押金数额
-		int64_t _cashPledge;
+			double _cashPledge;
 
 		// 加入游戏需要钻石数量
 		int64_t _diamondNeed;

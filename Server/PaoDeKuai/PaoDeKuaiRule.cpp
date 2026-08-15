@@ -436,10 +436,10 @@ namespace NiuMa
 			_baseScore = 1;
 		if (_scoreScale < 1)
 			_scoreScale = 1;
-		if (!root.isMember("score_scale") && _roundCount == 8 && (_baseScore == 3 || _baseScore == 5))
+		if (_roundCount <= 0 || (_roundCount > 1 && _roundCount < 8))
+			_roundCount = 8;
+		if (!root.isMember("score_scale"))
 			_scoreScale = 10;
-		if (_roundCount < 0)
-			_roundCount = 0;
 		if (_autoPlayTimeout < 5000)
 			_autoPlayTimeout = 5000;
 	}

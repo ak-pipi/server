@@ -8,7 +8,7 @@ namespace NiuMa {
 	GetCashPledgeTask::GetCashPledgeTask(const std::string& playerId, const std::string& venueId)
 		: _playerId(playerId)
 		, _venueId(venueId)
-		, _amount(0LL)
+		, _amount(0.0)
 	{}
 
 	GetCashPledgeTask::~GetCashPledgeTask() {}
@@ -27,7 +27,7 @@ namespace NiuMa {
 	int GetCashPledgeTask::fetchResult(sql::ResultSet* res) {
 		int rows = 0;
 		if (res->next()) {
-			_amount = res->getInt64("amount");
+			_amount = res->getDouble("amount");
 			rows++;
 		}
 		return rows;
@@ -41,7 +41,7 @@ namespace NiuMa {
 		return _venueId;
 	}
 
-	int64_t GetCashPledgeTask::getAmount() const {
+	double GetCashPledgeTask::getAmount() const {
 		return _amount;
 	}
 }
