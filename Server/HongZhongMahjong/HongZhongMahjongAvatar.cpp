@@ -7,6 +7,26 @@
 
 namespace NiuMa
 {
+	namespace
+	{
+		bool hasFlag(int mask, int flag) {
+			return (mask & flag) == flag;
+		}
+
+		bool hasGangShangHua(int huWay) {
+			return hasFlag(huWay, static_cast<int>(MahjongGenre::HuWay::GangShangHua1)) ||
+				hasFlag(huWay, static_cast<int>(MahjongGenre::HuWay::GangShangHua2)) ||
+				hasFlag(huWay, static_cast<int>(MahjongGenre::HuWay::GangShangHua3)) ||
+				hasFlag(huWay, static_cast<int>(MahjongGenre::HuWay::GangShangHua4));
+		}
+
+		bool hasHongZhongBonusHu(int huStyle, int huWay) {
+			return hasFlag(huStyle, static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui)) ||
+				hasFlag(huStyle, static_cast<int>(MahjongGenre::HuStyle::PengPengHu)) ||
+				hasGangShangHua(huWay);
+		}
+	}
+
 	HongZhongMahjongAvatar::HongZhongMahjongAvatar(const std::string& playerId, int seat, bool bRobot)
 		: MahjongAvatar(playerId, seat, bRobot)
 		, _winGold(0.0)
@@ -30,15 +50,17 @@ namespace NiuMa
 	}
 
 	int HongZhongMahjongAvatar::calcHuScore() const {
-		const int qiXiaoDui = static_cast<int>(MahjongGenre::HuStyle::QiXiaoDui);
-		const int pengPengHu = static_cast<int>(MahjongGenre::HuStyle::PengPengHu);
-		const int qingYiSe = static_cast<int>(MahjongGenre::HuStyle::QingYiSe);
-		bool bigHu = ((_huStyle & qiXiaoDui) == qiXiaoDui) ||
-			((_huStyle & pengPengHu) == pengPengHu) ||
-			((_huStyle & qingYiSe) == qingYiSe);
-		int score = bigHu ? 5 : 4;
+		const int fixedHuScore = 2;
+		const int fixedBaseScore = 2;
+		const bool bonusHu = hasHongZhongBonusHu(_huStyle, _huWay);
+		const int huScore = fixedHuScore + (bonusHu ? 1 : 0);
+		const int birdScore = std::max(1, _birdMultiplier);
+
+		int score = (huScore + birdScore) * fixedBaseScore;
 		if (_huHongZhongCount == 0)
 			score *= 2;
+		if (bonusHu)
+			score += 1;
 		return score;
 	}
 

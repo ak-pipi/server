@@ -1296,7 +1296,7 @@ namespace NiuMa
 		if (!ruleConfig.empty())
 			parseRuleConfig(ruleConfig);
 
-		// 桃江最低携带积分与大厅入口一致，真实可输额度由玩家本次携带积分决定。
+		// 桃江最低入场积分与大厅入口一致，真实可输额度由玩家入房背包积分决定。
 		setCashPledge(_diZhu * 8);
 	}
 

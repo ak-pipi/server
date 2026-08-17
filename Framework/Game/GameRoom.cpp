@@ -363,13 +363,13 @@ namespace NiuMa
 			return false;
 			double carryScore = readCarryScoreFromBase64(base64);
 			if (carryScore < 0.0) {
-				errMsg = "携带积分参数错误";
+				errMsg = "入房积分参数错误";
 				return false;
 			}
 			double targetCashPledge = _cashPledge;
 			if (carryScore > 0.0) {
 				if (carryScore < _cashPledge) {
-					errMsg = std::string("携带积分不足，最低需要") + formatOneDecimal(_cashPledge) + std::string("积分");
+					errMsg = std::string("积分不足，最低需要") + formatOneDecimal(_cashPledge) + std::string("积分");
 					return false;
 				}
 				targetCashPledge = carryScore;
